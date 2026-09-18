@@ -1,0 +1,41 @@
+# ---------- Node.js (backend/, frontend/) ----------
+node_modules/
+frontend/dist/
+npm-debug.log*
+yarn-error.log*
+.vite/
+*.tsbuildinfo
+
+# ---------- Python (run_detect.py, start_all.py) ----------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# ---------- ข้อมูลตอนรัน ----------
+backend/auction.db
+backend/auction.db-wal
+backend/auction.db-shm
+output.mp4
+cam_*.jpg
+*.log
+
+# ---------- ความลับ: config.yaml มีรหัสผ่าน MQTT ใช้ config.example.yaml เป็นแม่แบบแทน ----------
+config.yaml
+.env
+.env.*
+
+# ---------- โมเดลและวิดีโอขนาดใหญ่ (best.pt 19 MB commit ได้ ถ้าใหญ่กว่านี้ให้ใช้ Git LFS หรือ Release) ----------
+*.mp4
+*.avi
+*.mkv
+runs/
+
+# ---------- ระบบปฏิบัติการ / IDE ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp

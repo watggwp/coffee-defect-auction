@@ -1,0 +1,5 @@
+ultralytics>=8.3
+opencv-python>=4.9
+pyyaml
+paho-mqtt>=2.0
+# torch ติดตั้งแยกตาม CUDA: https://pytorch.org/get-started/locally/

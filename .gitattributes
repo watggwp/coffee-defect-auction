@@ -1,0 +1,11 @@
+# ให้ git จัดการปลายบรรทัดเอง (เก็บใน repo เป็น LF, เช็คเอาต์ตามระบบ) ตัดคำเตือน LF/CRLF บน Windows
+* text=auto
+
+# ไฟล์ที่ต้องคง CRLF สำหรับ Windows
+*.bat text eol=crlf
+
+# ไฟล์ไบนารี
+*.pt binary
+*.png binary
+*.jpg binary
+*.mp4 binary

@@ -1,0 +1,23 @@
+{
+  "name": "tesa-auction-backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --no-warnings=ExperimentalWarning e2e.test.mjs && node --no-warnings=ExperimentalWarning softclose.test.mjs",
+    "start": "node --no-warnings=ExperimentalWarning server.js",
+    "simulate": "node --no-warnings=ExperimentalWarning simulate.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "aedes": "^1.2.0",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "mqtt": "^5.16.0",
+    "ws": "^8.21.3",
+    "yaml": "^2.9.1"
+  }
+}

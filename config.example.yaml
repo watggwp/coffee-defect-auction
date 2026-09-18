@@ -1,0 +1,47 @@
+# ================= config สำหรับ run_detect.py =================
+# แก้ค่าที่นี่ ไม่ต้องแก้โค้ด
+
+model:
+  path: best.pt          # ไฟล์โมเดล .pt
+  device: 0              # 0 = GPU ตัวแรก, "cpu" = ใช้ CPU
+  half: false            # FP16: เปิดเฉพาะการ์ดที่มี Tensor Core (RTX) บน GTX 16xx เปิดแล้วช้าลง ~4 เท่า
+  imgsz: 640             # ขนาดภาพที่ป้อนเข้าโมเดล
+  conf: 0.5             # ค่าความมั่นใจต่ำสุดที่จะแสดงกรอบ (0-1)
+  iou: 0.45              # NMS IoU threshold
+
+source:
+  input: 3               # 0 = webcam ตัวแรก | เลข index อื่น เช่น 3 = OBS Virtual Camera (ดูเลขด้วย python list_cameras.py)
+                         # หรือ path วิดีโอ "video.mp4" | RTSP/HTTP url เช่น "rtsp://user:pass@ip:554/stream"
+  backend: dshow         # auto | dshow | msmf  (กล้องเสมือนอย่าง OBS Virtual Camera มักต้องใช้ dshow)
+  width: 640             # ความกว้างที่ขอจากกล้อง (ใช้เฉพาะ webcam) ใส่ 0 = ไม่กำหนด
+  height: 480
+
+display:
+  window_name: "Coffee Bean Defect Detection"
+  show_fps: true
+  show_conf: true        # แสดงค่าความแม่นยำบนกรอบ
+  box_thickness: 2
+  font_scale: 0.6
+  resize_to: 0           # ย่อหน้าต่างแสดงผลให้กว้างเท่านี้ (px) ใส่ 0 = ไม่ย่อ
+
+output:
+  save_video: false      # true = บันทึกวิดีโอผลลัพธ์
+  save_path: output.mp4
+
+mqtt:
+  enable: true          # true = ส่งผลตรวจขึ้น MQTT
+  host: localhost          # broker เช่น localhost หรือ 192.168.1.10
+  port: 1883
+  username: ""           # เว้นว่างถ้าไม่ต้อง auth
+  password: ""
+  topic: tesa/detections
+  qos: 0
+  device_id: cam1        # ชื่อกล้อง/เครื่อง ใส่ไปใน payload
+  min_interval: 0        # วินาทีขั้นต่ำระหว่างการส่ง เช่น 0.5 = ส่งไม่เกิน 2 ครั้ง/วิ (0 = ส่งทุกเฟรมที่เจอ)
+  only_when_detected: true   # true = ส่งเฉพาะเฟรมที่เจออย่างน้อย 1 ตัว
+
+trigger:
+  hold_seconds: 3.0      # ต้องตรวจเจอวัตถุเดิมต่อเนื่องกี่วินาที ถึงจะส่ง MQTT (หลอดโหลดเต็ม)
+  lost_seconds: 1.0      # วัตถุหายจากภาพนานเกินนี้ = ถือว่าออกไปแล้ว ถ้ากลับมาใหม่จะนับใหม่และส่งใหม่ได้
+  tracker: bytetrack.yaml   # ตัวจับ ID ข้ามเฟรม: bytetrack.yaml (เร็ว) หรือ botsort.yaml (แม่นกว่า)
+  bar_height: 8          # ความหนาหลอดโหลด (px)

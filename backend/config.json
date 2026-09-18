@@ -1,0 +1,47 @@
+{
+  "http_port": 8000,
+  "db_file": "auction.db",
+
+  "mqtt": {
+    "_comment": "detector_config = อ่าน host/port/username/password/topic จาก config.yaml ของตัวตรวจ (ตั้งค่าที่เดียว) | ใส่ null แล้วใช้ค่าด้านล่างแทน",
+    "detector_config": "../config.yaml",
+    "embedded_broker": false,
+    "broker_port": 1883,
+    "external_url": "mqtt://localhost:1883",
+    "username": "",
+    "password": "",
+    "topic": "tesa/+/detections"
+  },
+
+  "auction": {
+    "duration_seconds": 60,
+    "min_increment": 10,
+    "default_start_price": 100,
+    "soft_close": {
+      "_comment": "ต่อเวลาอัตโนมัติเมื่อมีคนเสนอราคาตอนใกล้หมดเวลา | max_extensions: 0 = ไม่จำกัด | เปิด/ปิดจากหน้าเว็บได้ (ค่านี้คือค่าเริ่มต้นตอนสตาร์ท)",
+      "enabled": true,
+      "extend_window_seconds": 10,
+      "extend_to_seconds": 10,
+      "max_extensions": 10
+    },
+    "start_price_by_class": {
+      "Broken": 50,
+      "Cut": 60,
+      "Dry_Cherry": 80,
+      "Fade": 70,
+      "Floater": 60,
+      "Full_Black": 30,
+      "Full_Sour": 30,
+      "Fungus_Damage": 20,
+      "Hush": 90,
+      "Immature": 70,
+      "Parchment": 90,
+      "Partial_Black": 50,
+      "Partial_Sour": 50,
+      "Severe_Insect_Damange": 20,
+      "Shell": 80,
+      "Slight_Insect_Damage": 60,
+      "Withered": 60
+    }
+  }
+}

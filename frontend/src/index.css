@@ -1,0 +1,17 @@
+:root {
+  --green: #277150;
+  --red: #c83232;
+  --bg: #f6f8f7;
+  --card: #ffffff;
+  --fg: #1c1f1e;
+  --muted: #6b7371;
+  --line: #dfe5e2;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Thai", sans-serif;
+  line-height: 1.45;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #131715; --card: #1b201e; --fg: #e8ece9; --muted: #96a09b; --line: #2b332f; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); }

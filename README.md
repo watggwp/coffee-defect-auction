@@ -1,0 +1,423 @@
+# TESA - ระบบตรวจตำหนิเมล็ดกาแฟด้วย AI และประมูลออนไลน์แบบ real-time
+
+กล้องส่องเมล็ดกาแฟ → AI ตรวจว่าเป็นตำหนิชนิดไหน → ระบบสร้าง "ล็อต" ให้ผู้ซื้อเสนอราคาแข่งกันผ่านหน้าเว็บ → หมดเวลาแล้วปิดการขายอัตโนมัติ
+
+## สารบัญ
+
+1. [ภาพรวมระบบ](#1-ภาพรวมระบบ)
+2. [เริ่มใช้งานใน 3 นาที](#2-เริ่มใช้งานใน-3-นาที)
+3. [การไหลของข้อมูลตั้งแต่กล้องถึงหน้าเว็บ](#3-การไหลของข้อมูลตั้งแต่กล้องถึงหน้าเว็บ)
+4. [ส่วนที่ 1: ตัวตรวจ run_detect.py](#4-ส่วนที่-1-ตัวตรวจ-run_detectpy)
+5. [ส่วนที่ 2: Backend (Node.js)](#5-ส่วนที่-2-backend-nodejs)
+6. [ส่วนที่ 3: Frontend (React)](#6-ส่วนที่-3-frontend-react)
+7. [ไฟล์ config ทั้งหมด](#7-ไฟล์-config-ทั้งหมด)
+8. [รูปแบบข้อมูลและ API](#8-รูปแบบข้อมูลและ-api)
+9. [การทดสอบ](#9-การทดสอบ)
+10. [แก้ปัญหาที่พบบ่อย](#10-แก้ปัญหาที่พบบ่อย)
+11. [ข้อจำกัดและแนวทางพัฒนาต่อ](#11-ข้อจำกัดและแนวทางพัฒนาต่อ)
+12. [อภิธานศัพท์](#12-อภิธานศัพท์)
+
+---
+
+## 1. ภาพรวมระบบ
+
+ระบบแบ่งเป็น 3 ส่วนที่ทำงานอิสระต่อกัน คุยกันผ่านข้อความมาตรฐาน (MQTT, REST, WebSocket) จึงแก้หรือเปลี่ยนส่วนใดส่วนหนึ่งได้โดยไม่กระทบส่วนอื่น
+
+```mermaid
+flowchart LR
+    CAM[กล้อง USB / OBS Virtual Camera] --> DET
+
+    subgraph DET[ตัวตรวจ run_detect.py - Python]
+        Y[YOLO11s บน GPU] --> T[ByteTrack ให้ ID วัตถุ] --> H[หลอดโหลด: เจอต่อเนื่องครบ N วิ]
+    end
+
+    H -- MQTT publish<br/>tesa/detections --> BR[(MQTT Broker)]
+    BR -- subscribe --> BE
+
+    subgraph BE[Backend server.js - Node.js]
+        L[สร้างล็อต + ราคาเริ่ม] --> DB[(SQLite)]
+        BID[รับเสนอราคา<br/>ตรวจกติกา + ต่อเวลา] --> DB
+        CLK[นาฬิกาปิดล็อตทุก 1 วิ] --> DB
+    end
+
+    BE -- REST /api --> FE
+    BE -- WebSocket /ws<br/>push ทันที --> FE
+
+    subgraph FE[Frontend - React]
+        UI[หน้าประมูล: ล็อต ราคา นับถอยหลัง ปุ่มเสนอ]
+    end
+
+    FE --> U1[ผู้ซื้อ A]
+    FE --> U2[ผู้ซื้อ B]
+    FE --> U3[ผู้ซื้อ ...]
+```
+
+| ส่วน | โฟลเดอร์ | เทคโนโลยี | พอร์ต | หน้าที่หลัก |
+|---|---|---|---|---|
+| ตัวตรวจ | `run_detect.py`, `config.yaml` | Python 3.12, ultralytics YOLO11, OpenCV, paho-mqtt | - | ตรวจจับ, ติดตามวัตถุ, นับเวลา, ส่ง MQTT |
+| Backend | `backend/` | Node.js 22+, Express, ws, mqtt, node:sqlite | 8000 HTTP+WS (1883 ถ้าใช้ broker ในตัว) | สร้างล็อต, ตัดสินการเสนอราคา, กระจายข้อมูล real-time, เก็บประวัติ |
+| Frontend | `frontend/` | React 19, Vite, TypeScript | 5173 (โหมดพัฒนา) | หน้าประมูลสำหรับผู้ซื้อหลายคนพร้อมกัน |
+| ตัวเปิดระบบ | `start_all.py`, `start.bat` | Python | - | เปิดทั้ง 3 ส่วนด้วยคำสั่งเดียว |
+
+**ทำไมต้องมี broker และ backend ตรงกลาง** เพราะการประมูลต้องมี "ความจริงชุดเดียว" ว่าใครเสนอราคาก่อนและราคาเท่าไร ถ้าปล่อยให้ browser ของผู้ซื้อคุยกันเอง จะเกิดกรณีสองคนกดพร้อมกันแล้วเห็นผลไม่ตรงกัน backend จึงเป็นผู้ตัดสินเพียงคนเดียว และ MQTT ทำให้ตัวตรวจกับ backend ไม่ต้องรู้จักกันโดยตรง (ตัวตรวจอยู่ที่โรงงาน backend อยู่ที่ server ก็ได้)
+
+---
+
+## 2. เริ่มใช้งานใน 3 นาที
+
+**สิ่งที่ต้องมี** Python 3.10+ (พร้อม torch ที่รองรับ CUDA ถ้าจะใช้ GPU), Node.js 22+, กล้อง USB หรือ OBS
+
+```powershell
+# ครั้งแรก: ติดตั้งไลบรารี Python (torch ติดตั้งแยกตาม CUDA ของเครื่อง ดู https://pytorch.org)
+pip install -r requirements.txt
+
+# ครั้งแรกหลัง clone: สร้าง config.yaml จากแม่แบบ แล้วใส่ host/username/password ของ MQTT broker
+# (config.yaml ถูก .gitignore ไว้ เพราะมีรหัสผ่าน จะไม่ถูก commit)
+copy config.example.yaml config.yaml
+
+# เปิดทั้งระบบ (ครั้งแรกจะ npm install และ build หน้าเว็บให้อัตโนมัติ)
+python start_all.py
+```
+
+browser จะเปิด http://localhost:8000 ให้เอง หน้าต่างวิดีโอแสดงภาพจากกล้องพร้อมกรอบตรวจจับ กด Ctrl+C ใน terminal ครั้งเดียวปิดทุกอย่าง
+
+ตัวเลือกที่ใช้บ่อย
+
+```powershell
+python start_all.py --sim 5       # ไม่มีกล้อง: ยิงผลตรวจจำลองทุก 5 วิ
+python start_all.py --no-detect   # เฉพาะ backend + หน้าเว็บ
+python start_all.py --dev         # แก้หน้าเว็บ: เปิด vite dev server ที่ :5173 ด้วย (hot reload)
+python start_all.py --build       # บังคับ build หน้าเว็บใหม่
+python list_cameras.py            # หาเลข index กล้อง / OBS Virtual Camera
+```
+
+เครื่องอื่นในวง LAN (มือถือ, โน้ตบุ๊กเพื่อน) เปิดหน้าเว็บด้วย IP ที่ backend พิมพ์ตอนสตาร์ท เช่น `http://10.10.2.62:8000`
+
+---
+
+## 3. การไหลของข้อมูลตั้งแต่กล้องถึงหน้าเว็บ
+
+```mermaid
+sequenceDiagram
+    participant C as กล้อง
+    participant D as run_detect.py
+    participant M as MQTT Broker
+    participant B as Backend
+    participant DB as SQLite
+    participant W as หน้าเว็บ (ทุกคน)
+
+    loop ทุกเฟรม ~30 FPS
+        C->>D: ภาพ
+        D->>D: YOLO ตรวจ + ByteTrack ให้ ID
+        D->>D: นับเวลาที่เจอ ID เดิมต่อเนื่อง (หลอดโหลด)
+    end
+    D->>M: publish tesa/detections {class, confidence, track_id, time} (เมื่อครบ hold_seconds)
+    M->>B: message
+    B->>DB: INSERT ล็อต (ราคาเริ่มตามคลาส, ปิดใน 60 วิ)
+    B-->>W: WS lot_created
+    W->>B: POST /api/lots/:id/bids {bidder, amount}
+    B->>DB: BEGIN → ตรวจกติกา → ต่อเวลาถ้าเข้าเงื่อนไข → UPDATE → COMMIT
+    B-->>W: WS bid (+ lot_extended ถ้าต่อเวลา)
+    loop ทุก 1 วิ
+        B->>DB: หาล็อตที่ ends_at ผ่านแล้ว → status = sold / unsold
+        B-->>W: WS lot_closed
+    end
+```
+
+จุดสำคัญ
+
+1. **ตัวตรวจไม่ส่งทุกเฟรม** ส่งเฉพาะเมื่อวัตถุตัวเดิมอยู่ในภาพต่อเนื่องครบเวลาที่กำหนด และส่งตัวละครั้ง กันข้อมูลท่วมและกันตรวจผิดชั่วขณะ
+2. **1 message MQTT = 1 ล็อต** ถ้าเจอหลายเมล็ดพร้อมกันจะอยู่ในล็อตเดียว ราคาเริ่มคิดจากคลาสที่ความมั่นใจสูงสุด
+3. **หน้าเว็บไม่ต้อง refresh** ทุกเหตุการณ์ push ผ่าน WebSocket ถึงทุก browser ภายในเสี้ยววินาที ถ้าหลุดจะ reconnect เองทุก 2 วิ และได้ snapshot ล็อตที่เปิดอยู่ทันทีที่ต่อกลับ
+
+---
+
+## 4. ส่วนที่ 1: ตัวตรวจ run_detect.py
+
+### 4.1 ขั้นตอนต่อเฟรม
+
+```
+อ่านเฟรม → model.track() → รายการกรอบ (คลาส, ความมั่นใจ, track_id)
+        → TrackHold.update() → progress ต่อ ID, รายชื่อ ID ที่ครบเวลาในเฟรมนี้
+        → ส่ง MQTT ถ้ามี ID ครบเวลา → วาดกรอบ ป้าย หลอดโหลด FPS → แสดงผล
+```
+
+**โมเดล** `best.pt` คือ YOLO11s ที่เทรนแล้ว 17 คลาสตำหนิเมล็ดกาแฟ: Broken, Cut, Dry_Cherry, Fade, Floater, Full_Black, Full_Sour, Fungus_Damage, Hush, Immature, Parchment, Partial_Black, Partial_Sour, Severe_Insect_Damange, Shell, Slight_Insect_Damage, Withered
+
+**การติดตามวัตถุ (tracking)** ใช้ `model.track()` กับ ByteTrack แทน `predict()` เพื่อให้เมล็ดเดิมได้เลข ID เดิมข้ามเฟรม ป้ายบนจอจะเห็นเป็น `#7 Broken 91%` เลข ID นี้คือหัวใจของการ "ไม่ส่งซ้ำ"
+
+### 4.2 หลอดโหลดและการตัดสินใจส่ง (คลาส TrackHold)
+
+ต่อ ID แต่ละตัว ระบบจำเวลาที่เห็นครั้งแรก เวลาที่เห็นล่าสุด และธงว่าส่งไปแล้วหรือยัง
+
+| เหตุการณ์ | ผล |
+|---|---|
+| เห็น ID ใหม่ | เริ่มนับเวลา หลอดโหลดว่าง |
+| เห็นต่อเนื่องจนครบ `hold_seconds` | หลอดเต็ม → ส่ง MQTT 1 ครั้ง → ตั้งธงส่งแล้ว หลอดเป็นสีเขียว |
+| ยังอยู่ในภาพหลังส่งแล้ว | ไม่ส่งซ้ำ |
+| หายจากภาพนานเกิน `lost_seconds` | ลบ ID ทิ้ง ถ้ากลับมาใหม่จะนับใหม่และส่งใหม่ได้ |
+| หลาย ID ครบเวลาในเฟรมเดียว | รวมส่งใน message เดียว แยกเป็น list |
+
+### 4.3 แหล่งภาพ
+
+ตั้งใน `config.yaml -> source`
+
+- `input: 0` webcam ตัวแรก, `input: 3` กล้องตัวอื่นเช่น OBS Virtual Camera, `input: "video.mp4"` ไฟล์, หรือ `"rtsp://..."`
+- `backend: dshow` จำเป็นสำหรับกล้องเสมือนอย่าง OBS (เปิดผ่าน MSMF ไม่ได้) ค่า `auto` จะลอง DirectShow ให้เองถ้าเปิดไม่ติด
+- ถ้ากล้องเปิดได้แต่ไม่มีภาพ มักเพราะโปรแกรมอื่น (OBS) ใช้กล้องตัวนั้นอยู่ Windows ไม่ให้เปิดซ้อน ให้รับภาพผ่าน OBS Virtual Camera แทน
+
+### 4.4 GPU และความเร็ว
+
+- ใช้ GPU ตัวแรกอัตโนมัติ ถ้าไม่มี CUDA จะสลับไป CPU พร้อมแจ้งเตือน
+- `half: false` เป็นค่าเริ่มต้น เพราะการ์ด GTX 16xx ไม่มี Tensor Core ทำให้ FP16 ช้ากว่า FP32 ราว 4 เท่า (วัดจริง: 83 ms เทียบ 15 ms ต่อเฟรม) เปิด `half: true` เฉพาะการ์ด RTX
+- FPS ที่เห็นบนจอถูกจำกัดโดยกล้อง (ทั่วไป 30 FPS) ไม่ใช่โมเดล ถ้าตัวเลขต่ำกว่า 20 ให้ดูหัวข้อแก้ปัญหา
+
+---
+
+## 5. ส่วนที่ 2: Backend (Node.js)
+
+โฟลเดอร์ `backend/` ไฟล์หลัก 4 ตัว
+
+| ไฟล์ | หน้าที่ |
+|---|---|
+| `server.js` | จุดเริ่ม: HTTP + WebSocket + MQTT subscriber + นาฬิกาปิดล็อต + เสิร์ฟหน้าเว็บ |
+| `db.js` | ตาราง SQLite และ logic การเสนอราคาแบบ atomic |
+| `mqttConfig.js` | รวมค่า MQTT จาก config.json หรืออ่านจาก config.yaml ของตัวตรวจ |
+| `simulate.js` | ยิงผลตรวจจำลองเข้า MQTT สำหรับทดสอบ |
+
+### 5.1 วงจรชีวิตของล็อต
+
+```mermaid
+stateDiagram-v2
+    [*] --> open: MQTT message เข้ามา<br/>ends_at = now + duration_seconds
+    open --> open: มีคนเสนอราคา (ราคา/ผู้เสนอเปลี่ยน)
+    open --> open: เสนอราคาในหน้าต่างต่อเวลา<br/>ends_at = now + extend_to_seconds
+    open --> sold: ถึง ends_at และ bid_count > 0
+    open --> unsold: ถึง ends_at และไม่มีใครเสนอ
+    sold --> [*]
+    unsold --> [*]
+```
+
+**ราคาเริ่ม** ดูจากคลาสที่ความมั่นใจสูงสุดในล็อต เทียบตาราง `auction.start_price_by_class` ใน config.json (เช่น Parchment 90, Full_Black 30) ถ้าไม่มีในตารางใช้ `default_start_price`
+
+### 5.2 กติกาการเสนอราคา (db.js → placeBid)
+
+ทุกการเสนอราคาทำใน transaction เดียว (`BEGIN IMMEDIATE ... COMMIT`) จึงเป็น atomic: ถ้าสองคนกดพร้อมกันด้วยราคาเท่ากัน คนแรกที่ล็อกฐานข้อมูลได้จะชนะ คนที่สองจะถูกปฏิเสธด้วยข้อความ "ต้องเสนออย่างน้อย ..." ทดสอบยืนยันแล้วใน `e2e.test.mjs`
+
+ลำดับการตรวจ
+
+1. ล็อตมีอยู่และ `status = open`
+2. ยังไม่ถึง `ends_at`
+3. ราคาต้อง ≥ ราคาเริ่ม (ครั้งแรก) หรือ ≥ ราคาปัจจุบัน + `min_increment` (ครั้งถัดไป)
+4. คำนวณต่อเวลา (หัวข้อ 5.3) แล้วอัปเดตราคา ผู้เสนอ จำนวนครั้ง เวลาปิด และบันทึกลงตาราง `bids`
+
+### 5.3 ต่อเวลาอัตโนมัติ (soft close / anti-sniping)
+
+ป้องกันการ "กดวินาทีสุดท้าย" ถ้ามีคนเสนอราคาตอนเหลือเวลาน้อยกว่า `extend_window_seconds` ระบบเลื่อนเวลาปิดเป็น ตอนนี้ + `extend_to_seconds` โดยไม่ทำให้เวลาสั้นลงกว่าเดิม
+
+```
+เหลือ 6 วิ  + มีคนเสนอ  → กลับเป็น 10 วิ  (extensions = 1)
+เหลือ 3 วิ  + มีคนเสนอ  → กลับเป็น 10 วิ  (extensions = 2)
+เหลือ 30 วิ + มีคนเสนอ  → ไม่ต่อ (นอกหน้าต่าง)
+ครบ max_extensions       → ไม่ต่อ ปิดตามเวลา
+ไม่มีใครเสนอเพิ่ม         → ปิดตามเวลา ไม่ว่าจะเปิดสวิตช์หรือไม่
+```
+
+- `max_extensions: 0` = ไม่จำกัดจำนวนครั้ง
+- เปิด/ปิดและแก้ตัวเลขได้จากแถบบนหน้าเว็บผ่าน `PUT /api/settings` มีผลกับทุกคนทันที แต่ไม่บันทึกลงไฟล์ รีสตาร์ทแล้วกลับเป็นค่าใน config.json
+- เมื่อต่อเวลา backend ส่ง WS `lot_extended` และนับ `extensions` ในล็อต
+
+### 5.4 นาฬิกาปิดล็อต
+
+`setInterval` ทุก 1 วินาที ดึงล็อตที่ `status = open` และ `ends_at <= now` แล้วเปลี่ยนเป็น sold หรือ unsold พร้อม broadcast `lot_closed` การปิดจึงคลาดเคลื่อนได้ไม่เกิน 1 วิ
+
+### 5.5 MQTT broker 2 แบบ
+
+| แบบ | ตั้งค่าใน backend/config.json | ใช้เมื่อ |
+|---|---|---|
+| broker ภายนอก (ค่าปัจจุบัน) | `embedded_broker: false`, `detector_config: "../config.yaml"` | มี broker บน server อยู่แล้ว backend อ่าน host/port/user/password/topic จาก config.yaml ของตัวตรวจ จึงตั้งค่าที่เดียวและไม่ต้องคัดลอกรหัสผ่านมาไว้สองไฟล์ |
+| broker ในตัว (Aedes) | `embedded_broker: true` และตั้ง config.yaml เป็น `host: localhost` | สาธิตเครื่องเดียว ไม่ต้องติดตั้งอะไรเพิ่ม |
+
+### 5.6 ฐานข้อมูล
+
+SQLite ไฟล์ `backend/auction.db` (โหมด WAL) ใช้ `node:sqlite` ที่มากับ Node ไม่ต้อง build native module
+
+```
+lots  : id, created_at, device, detected_at, main_class, detections(JSON), start_price,
+        current_price, current_bidder, bid_count, ends_at, extensions, status
+bids  : id, lot_id, bidder, amount, created_at
+```
+
+ลบไฟล์ `auction.db` เพื่อเริ่มใหม่ ตารางจะถูกสร้างอัตโนมัติ (มี migration เพิ่มคอลัมน์ให้ฐานข้อมูลเก่า)
+
+---
+
+## 6. ส่วนที่ 3: Frontend (React)
+
+ไฟล์หลัก `frontend/src/App.tsx` (หน้าเดียว) และ `api.ts` (ชนิดข้อมูล + fetch + WebSocket)
+
+### 6.1 องค์ประกอบหน้าเว็บ
+
+| ส่วน | ทำอะไร |
+|---|---|
+| หัวเว็บ | ช่องชื่อผู้เสนอราคา (จำใน localStorage ของ browser นั้น), สถานะเชื่อมต่อ real-time |
+| แถบต่อเวลาอัตโนมัติ | สวิตช์เปิด/ปิด, หน้าต่างเวลา, เวลาที่ต่อ, จำนวนครั้งสูงสุด + checkbox ไม่จำกัด |
+| แท็บ | กำลังประมูล (เรียงล็อตใกล้ปิดไว้บนสุด) / ปิดแล้ว |
+| การ์ดล็อต | คลาสหลัก, ผลตรวจทุกตัวพร้อมแถบความมั่นใจ, นับถอยหลัง, แถบเวลา, ราคาปัจจุบัน, ผู้เสนอสูงสุด, ช่องใส่ราคา + ปุ่มขั้นต่ำ + ปุ่มเสนอ |
+| เหตุการณ์ล่าสุด | log ด้านขวา: ล็อตใหม่, เสนอราคา, ต่อเวลา, ปิดล็อต, กติกาเปลี่ยน |
+
+**สีแถบเวลาบนการ์ด** เขียว = ปกติ, เหลือง = อยู่ในหน้าต่างต่อเวลา (เสนอตอนนี้จะต่อ), แดง = ใกล้หมดและต่อไม่ได้แล้ว การ์ดขอบแดงเมื่อเหลือไม่ถึง 10 วิ กระพริบเหลืองพร้อมข้อความ "+ ต่อเวลา" เมื่อถูกต่อ ป้าย `+N/สูงสุด` นับครั้งที่ต่อ
+
+### 6.2 การอัปเดตข้อมูล
+
+1. โหลดครั้งแรกด้วย REST: `/api/lots` และ `/api/settings`
+2. เปิด WebSocket `/ws` รับ `snapshot` + `settings` ทันที จากนั้นรับ event ทีละรายการและอัปเดตเฉพาะการ์ดที่เกี่ยว (upsert ตาม id)
+3. เมื่อกดเสนอราคา ส่ง POST แล้วใช้ผลตอบกลับอัปเดตการ์ดทันที browser อื่นได้ผ่าน WS
+4. เปลี่ยนกติกาใช้ optimistic update: แสดงบนจอทันที แล้วค่าจริงจาก server ตามมาทับ
+5. ทุกตัวเลขกติกา (ขั้นต่ำเพิ่มราคา, เวลาประมูล) ดึงจาก backend ไม่ hardcode ในหน้าเว็บ
+
+### 6.3 โหมดรัน
+
+- **ใช้งานจริง** `npm run build` ได้ `frontend/dist/` แล้ว backend เสิร์ฟให้เองที่พอร์ต 8000 (พอร์ตเดียว เครื่องอื่นเข้าง่าย)
+- **พัฒนา** `npm run dev` ที่พอร์ต 5173 พร้อม hot reload โดย `vite.config.ts` proxy `/api` และ `/ws` ไป backend ให้
+
+---
+
+## 7. ไฟล์ config ทั้งหมด
+
+### config.yaml (ตัวตรวจ)
+
+| หมวด | คีย์สำคัญ | ความหมาย |
+|---|---|---|
+| model | `path`, `device`, `half`, `imgsz`, `conf`, `iou` | ไฟล์โมเดล, GPU index หรือ cpu, FP16, ขนาดภาพเข้าโมเดล, ความมั่นใจต่ำสุดที่จะแสดง, NMS |
+| source | `input`, `backend`, `width`, `height` | แหล่งภาพ, DirectShow/MSMF, ขนาดที่ขอจากกล้อง |
+| display | `show_fps`, `show_conf`, `resize_to` | การแสดงผลบนหน้าต่างวิดีโอ |
+| output | `save_video`, `save_path` | บันทึกวิดีโอผลตรวจ |
+| mqtt | `enable`, `host`, `port`, `username`, `password`, `topic`, `device_id` | broker และ topic ที่ส่ง |
+| trigger | `hold_seconds`, `lost_seconds`, `tracker`, `bar_height` | เวลาที่ต้องเจอต่อเนื่องก่อนส่ง, เวลาที่ถือว่าหายจากภาพ, bytetrack/botsort |
+
+### backend/config.json
+
+| หมวด | คีย์สำคัญ | ความหมาย |
+|---|---|---|
+| ราก | `http_port`, `db_file` | พอร์ตเว็บ, ไฟล์ SQLite |
+| mqtt | `detector_config`, `embedded_broker`, `external_url`, `topic` | แหล่งค่า MQTT (ดู 5.5) |
+| auction | `duration_seconds`, `min_increment`, `default_start_price`, `start_price_by_class` | เวลาประมูล, ขั้นต่ำเพิ่ม, ราคาเริ่มต่อคลาส |
+| auction.soft_close | `enabled`, `extend_window_seconds`, `extend_to_seconds`, `max_extensions` | ต่อเวลาอัตโนมัติ (ค่าเริ่มต้นตอนสตาร์ท) |
+
+---
+
+## 8. รูปแบบข้อมูลและ API
+
+### MQTT: ตัวตรวจ → backend (topic ตาม config.yaml เช่น `tesa/detections`)
+
+```json
+{
+  "device": "cam1",
+  "time": "2026-09-18T20:25:32.430+07:00",
+  "count": 2,
+  "detections": [
+    {"id": 1, "track_id": 7, "class": "Broken",     "confidence": 0.9123},
+    {"id": 2, "track_id": 9, "class": "Full_Black", "confidence": 0.7712}
+  ]
+}
+```
+
+`time` เป็น ISO 8601 พร้อม timezone, `confidence` 0-1, `track_id` ตรงกับเลข # บนจอ
+
+### REST (backend, ทุกอย่างเป็น JSON)
+
+| Method | Path | ใช้ทำอะไร |
+|---|---|---|
+| GET | `/api/health` | สถานะ, จำนวน client ที่ต่อ WS, broker ที่ใช้ |
+| GET | `/api/lots?status=open&limit=100` | รายการล็อต status = open / sold / unsold / ว่าง = ทั้งหมด |
+| GET | `/api/lots/:id` | ล็อตเดียวพร้อมประวัติเสนอราคา `bids[]` |
+| POST | `/api/lots/:id/bids` | เสนอราคา body `{"bidder":"ชื่อ","amount":60}` ตอบล็อตใหม่ + `extended` |
+| GET | `/api/settings` | กติกาปัจจุบัน |
+| PUT | `/api/settings` | แก้กติกา body `{"soft_close": {...}}` (ส่งเฉพาะคีย์ที่จะแก้) |
+| POST | `/api/lots` | สร้างล็อตด้วยมือเพื่อทดสอบ รับ `duration_seconds` ได้ |
+
+ข้อผิดพลาดตอบ `{"error": "ข้อความภาษาไทย", "min": ราคาขั้นต่ำ(ถ้ามี)}` ด้วย HTTP 400/404/409
+
+### WebSocket `/ws` (backend → ทุก browser)
+
+ทุกข้อความมีรูป `{"type": ..., "data": ..., "ts": เวลา}`
+
+| type | data | เมื่อไร |
+|---|---|---|
+| `snapshot` | ล็อตที่เปิดอยู่ทั้งหมด | ทันทีที่ต่อ (รวมตอน reconnect) |
+| `settings` | กติกาปัจจุบัน | ทันทีที่ต่อ และทุกครั้งที่กติกาเปลี่ยน |
+| `lot_created` | ล็อต | ผลตรวจใหม่เข้ามา |
+| `bid` | ล็อต (+ field `extended`) | มีคนเสนอราคา |
+| `lot_extended` | ล็อต | ต่อเวลาอัตโนมัติ |
+| `lot_closed` | ล็อต (status sold/unsold) | หมดเวลา |
+
+---
+
+## 9. การทดสอบ
+
+```powershell
+cd backend
+npm start                 # terminal 1
+npm test                  # terminal 2: e2e.test.mjs + softclose.test.mjs
+```
+
+| ชุดทดสอบ | ครอบคลุม |
+|---|---|
+| `e2e.test.mjs` | MQTT → สร้างล็อต, ปฏิเสธราคาต่ำ/ไม่มีชื่อ, ราคาสูงกว่าชนะ, 3 คนกดพร้อมกันมีผู้ชนะคนเดียว, WS ได้ event ครบ |
+| `softclose.test.mjs` | ต่อเวลาในหน้าต่าง, หยุดเมื่อครบ max, max=0 ไม่จำกัด, ปิดสวิตช์ไม่ต่อ, นอกหน้าต่างไม่ต่อ |
+
+ทดสอบโดยไม่มีกล้อง: `npm run simulate 5` หรือ `python start_all.py --sim 5`
+ทดสอบหน้าเว็บคอมไพล์: `cd frontend; npx tsc -b; npm run build`
+
+---
+
+## 10. แก้ปัญหาที่พบบ่อย
+
+| อาการ | สาเหตุที่พบ | วิธีแก้ |
+|---|---|---|
+| `เปิดกล้อง index 0 ได้แต่ไม่มีภาพ` หรือ error MSMF -1072875772 | โปรแกรมอื่น (OBS) ใช้กล้องอยู่ | ใช้ OBS Virtual Camera: `input: 3`, `backend: dshow` (หาเลขด้วย `python list_cameras.py`) |
+| หน้าต่างวิดีโอเป็นโลโก้ OBS | ยังไม่กด Start Virtual Camera ใน OBS | กดปุ่มที่แผง Controls ของ OBS |
+| FPS 10-12 ทั้งที่ใช้ GPU | `half: true` บนการ์ดที่ไม่มี Tensor Core | ตั้ง `half: false` |
+| `backend ไม่ตอบที่ http://localhost:8000` | พอร์ตถูกใช้ มี backend เดิมค้าง | ปิด node ที่รัน server.js อยู่ หรือเปลี่ยน `http_port` |
+| `[WARN] MQTT ต่อไม่ได้` | broker ไม่ทำงาน / รหัสผิด / firewall | ตรวจ host/port/user/pass ใน config.yaml หรือสลับไป `embedded_broker: true` |
+| หน้าเว็บบอก "กำลังเชื่อมต่อ..." ค้าง | backend ปิด หรือเข้าผ่าน IP ที่ไม่ตรง | ดูว่า backend รัน และเปิดด้วย IP ที่ backend พิมพ์ตอนสตาร์ท |
+| ตรวจเจอของบนหน้าจอเป็นตำหนิ | Source ใน OBS เป็น Display Capture | เปลี่ยน Source เป็นกล้องหรือวิดีโอ และเพิ่ม `conf` เป็น 0.5 |
+| ล็อตเข้ามาถี่เกินไป | `hold_seconds` สั้น หรือ ID กระโดด | เพิ่ม `hold_seconds` / `lost_seconds` หรือลอง `tracker: botsort.yaml` |
+| ข้อความไทยใน terminal เป็นตัวอ่านไม่ออก | console ไม่ใช่ UTF-8 | ใช้ `start.bat` (ตั้ง chcp 65001 ให้) หรือรัน `chcp 65001` ก่อน |
+
+---
+
+## 11. ข้อจำกัดและแนวทางพัฒนาต่อ
+
+ต้นแบบนี้ออกแบบสำหรับสาธิตในวง LAN
+
+| ข้อจำกัด | ผลกระทบ | แนวทางเมื่อใช้จริง |
+|---|---|---|
+| ไม่มี login | ใครก็พิมพ์ชื่อใครได้ และทุกคนกดสวิตช์กติกาได้ | เพิ่ม auth (เช่น JWT) แยกสิทธิ์ผู้ซื้อ/ผู้ดูแล ย้ายแถบกติกาไปหน้า admin |
+| ไม่มี HTTPS | ข้อมูลวิ่งเป็น plain text ในเครือข่าย | วาง reverse proxy (nginx/Caddy) พร้อมใบรับรอง |
+| ไม่มีชำระเงิน | ปิดล็อตแล้วจบแค่บันทึกผู้ชนะ | เชื่อมผู้ให้บริการชำระเงินภายนอก |
+| กติกาที่แก้จากหน้าเว็บไม่ persist | รีสตาร์ทแล้วกลับเป็นค่า config | บันทึกลง SQLite หรือเขียนกลับ config.json |
+| SQLite ไฟล์เดียว | เหมาะกับ backend เครื่องเดียว | ย้ายไป PostgreSQL เมื่อต้อง scale หลายเครื่อง |
+| ตัวตรวจ ~30 FPS ต่อกล้อง 1 ตัว | หลายกล้องต้องรันหลาย process | ตั้ง `device_id` ต่างกัน backend แยกล็อตตามกล้องได้อยู่แล้ว |
+
+---
+
+## 12. อภิธานศัพท์
+
+| คำ | ความหมาย |
+|---|---|
+| **YOLO** | โมเดล AI ตรวจจับวัตถุแบบเร็ว ให้กรอบ + คลาส + ความมั่นใจในครั้งเดียว |
+| **confidence (ความมั่นใจ)** | ค่า 0-1 ที่โมเดลบอกว่ามั่นใจแค่ไหนว่ากรอบนี้เป็นคลาสนั้น |
+| **ByteTrack / track_id** | อัลกอริทึมจับคู่กรอบข้ามเฟรม ทำให้วัตถุเดิมได้เลขประจำตัวเดิม |
+| **hold_seconds / หลอดโหลด** | เวลาที่ต้องเจอวัตถุเดิมต่อเนื่องก่อนส่งผล กันการตรวจผิดชั่วขณะ |
+| **MQTT** | โปรโตคอลส่งข้อความเบา ๆ แบบ publish/subscribe ผ่านตัวกลางที่เรียกว่า broker |
+| **topic** | ชื่อช่องใน MQTT เช่น `tesa/detections` ผู้ส่ง publish และผู้รับ subscribe ที่ชื่อเดียวกัน |
+| **REST** | การเรียก API ผ่าน HTTP แบบขอ-ตอบ (GET/POST/PUT) |
+| **WebSocket** | ท่อสองทางค้างไว้ระหว่าง browser กับ server ให้ server push ข้อมูลได้ทันทีโดยไม่ต้องขอ |
+| **ล็อต (lot)** | หน่วยที่ประมูล 1 ล็อต = ผลตรวจ 1 ครั้ง อาจมีหลายเมล็ด |
+| **soft close / anti-sniping** | กติกาต่อเวลาเมื่อมีคนเสนอราคาตอนใกล้หมด กันการกดวินาทีสุดท้าย |
+| **min_increment** | จำนวนเงินขั้นต่ำที่ต้องเสนอสูงกว่าราคาปัจจุบัน |
+| **atomic / transaction** | การอ่าน-ตรวจ-เขียนที่ทำเป็นก้อนเดียว ไม่มีใครแทรกกลางได้ ใช้ตัดสินคนที่กดพร้อมกัน |
+| **FP16 / half** | คำนวณด้วยทศนิยม 16 บิต เร็วขึ้นบนการ์ดที่มี Tensor Core แต่ช้าลงบนการ์ดที่ไม่มี |
+| **OBS Virtual Camera** | กล้องเสมือนที่ OBS สร้างขึ้น ให้โปรแกรมอื่นรับภาพฉากของ OBS เหมือนเป็น webcam |
