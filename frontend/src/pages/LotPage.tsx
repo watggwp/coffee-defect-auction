@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { fetchLot, type Bid } from '../api'
 import { CountdownRing } from '../components/CountdownRing'
-import { BidForm, StatusChip, fmtBaht, fmtTime, lotTiming, nice } from '../components/LotCard'
+import { BidForm, OriginChip, StatusChip, fmtBaht, fmtTime, lotTiming, nice } from '../components/LotCard'
 import { useToast } from '../components/Toasts'
 import type { useAuction } from '../hooks/useAuction'
 
@@ -62,6 +62,7 @@ export function LotPage({ lotId, auction, bidder, setBidder }: {
           <h1>{nice(lot.main_class)}</h1>
           <div className="meta">กล้อง {lot.device} · ตรวจ {fmtTime(lot.detected_at)} · ปิด {fmtTime(lot.ends_at)}</div>
           <div className="chips">
+            <OriginChip lot={lot} detailed />
             <StatusChip lot={lot} isOpen={t.isOpen} />
             {lot.extensions > 0 && <span className="chip ext">ต่อเวลา +{lot.extensions}{sc.max_extensions > 0 ? `/${sc.max_extensions}` : ''}</span>}
             {t.inWindow && (t.canExtend

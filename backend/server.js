@@ -167,13 +167,20 @@ function createLotFromDetection(payload, durationSec = settings.duration_seconds
   const main = dets.reduce((a, b) => (b.confidence > a.confidence ? b : a));
   const startPrice = cfg.auction.start_price_by_class[main.class] ?? cfg.auction.default_start_price;
   const endsAt = new Date(Date.now() + durationSec * 1000).toISOString();
+  // แหล่งปลูก: payload ส่งมาเอง > ตั้งค่าตามชื่อกล้อง > ค่าเริ่มต้น (ภาคใต้)
+  const device = payload.device || "unknown";
+  const originCfg = cfg.origin ?? {};
+  const origin = payload.origin && typeof payload.origin === "object"
+    ? payload.origin
+    : { ...(originCfg.default ?? {}), ...(originCfg.by_device?.[device] ?? {}) };
   const lot = db.createLot({
-    device: payload.device || "unknown",
+    device,
     detected_at: payload.time || new Date().toISOString(),
     main_class: main.class,
     detections: dets,
     start_price: startPrice,
     ends_at: endsAt,
+    origin: Object.keys(origin).length ? origin : null,
   });
   console.log(`[LOT] #${lot.id} ${lot.main_class} x${dets.length} start ${startPrice} ends ${endsAt}`);
   broadcast("lot_created", lot);

@@ -29,6 +29,21 @@ export function StatusChip({ lot, isOpen }: { lot: Lot; isOpen: boolean }) {
   )
 }
 
+/** ชิปแหล่งปลูก: จังหวัดภาคใต้ + พันธุ์ (ค่ามาจาก backend/config.json -> origin) */
+export function OriginChip({ lot, detailed = false }: { lot: Lot; detailed?: boolean }) {
+  const o = lot.origin
+  const province = o?.province || 'ภาคใต้'
+  const text = detailed
+    ? [province, o?.farm, o?.variety].filter(Boolean).join(' · ')
+    : `${province}${o?.variety ? ` · ${o.variety}` : ''}`
+  return (
+    <span className="chip origin" title={`แหล่งปลูก: ${[o?.region || 'ภาคใต้ ประเทศไทย', o?.farm].filter(Boolean).join(' · ')}`}>
+      <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden><path d="M8 1.5a4.5 4.5 0 0 0-4.5 4.5c0 3.2 4.5 8.5 4.5 8.5s4.5-5.3 4.5-8.5A4.5 4.5 0 0 0 8 1.5zm0 6.3a1.8 1.8 0 1 1 0-3.6 1.8 1.8 0 0 1 0 3.6z" fill="currentColor" /></svg>
+      {text}
+    </span>
+  )
+}
+
 /** การ์ดสรุปในหน้าแรก: กดเพื่อเข้าหน้าล็อต */
 export function LotCard({ lot, bidder, now, settings, highlight, extendedFlash, index }: {
   lot: Lot; bidder: string; now: number; settings: Settings
@@ -51,6 +66,7 @@ export function LotCard({ lot, bidder, now, settings, highlight, extendedFlash, 
       </header>
 
       <div className="chips">
+        <OriginChip lot={lot} />
         <StatusChip lot={lot} isOpen={t.isOpen} />
         {lot.extensions > 0 && <span className="chip ext">ต่อเวลา +{lot.extensions}</span>}
         {t.inWindow && t.canExtend && <span className="chip hint-ok">เสนอตอนนี้ต่อเวลา</span>}

@@ -22,6 +22,17 @@
     "topic": "tesa/+/detections"
   },
 
+  "origin": {
+    "_comment": "แหล่งปลูกที่ติดไปกับทุกล็อต ตามชื่อกล้อง (device_id ใน config.yaml) ถ้าไม่พบใช้ default | payload MQTT ใส่ field origin มาเองได้จะใช้ค่านั้นก่อน",
+    "default": { "province": "ภาคใต้", "region": "ภาคใต้ ประเทศไทย", "variety": "โรบัสต้า" },
+    "by_device": {
+      "cam1":    { "province": "ชุมพร",        "farm": "สวนกาแฟท่าแซะ",     "variety": "โรบัสต้า" },
+      "cam2":    { "province": "ระนอง",        "farm": "กระบุรี",            "variety": "โรบัสต้า" },
+      "sim-cam": { "province": "สุราษฎร์ธานี", "farm": "แปลงทดสอบ",          "variety": "โรบัสต้า" },
+      "manual":  { "province": "กระบี่",        "farm": "ทดสอบด้วยมือ",       "variety": "โรบัสต้า" }
+    }
+  },
+
   "auction": {
     "duration_seconds": 60,
     "min_increment": 10,

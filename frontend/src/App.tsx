@@ -60,7 +60,11 @@ function Shell() {
         {route.name === 'lot' && <LotPage lotId={route.id} auction={auction} bidder={bidder} setBidder={setBidder} />}
         {route.name === 'home' && <AuctionPage auction={auction} bidder={bidder} setBidder={setBidder} />}
       </div>
-      <footer className="foot">TESA · ตรวจตำหนิเมล็ดกาแฟด้วย AI และประมูล real-time</footer>
+      <footer className="foot">
+        <div className="batik-line" aria-hidden />
+        <b>กาแฟโรบัสต้าจากภาคใต้ของไทย</b> · แหล่งปลูก ชุมพร · ระนอง · สุราษฎร์ธานี · กระบี่ · พังงา · นครศรีธรรมราช
+        <br /><small>TESA · ตรวจตำหนิเมล็ดกาแฟด้วย AI และประมูล real-time</small>
+      </footer>
     </div>
   )
 }

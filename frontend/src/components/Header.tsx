@@ -42,8 +42,8 @@ export function Header({ route, connected, isAdmin }: { route: string; connected
       <a className="brand" href="#/">
         <span className="brand-mark" aria-hidden>☕</span>
         <span>
-          <strong>ประมูลเมล็ดกาแฟ</strong>
-          <small>AI ตรวจตำหนิ · ประมูล real-time</small>
+          <strong>ประมูลกาแฟใต้</strong>
+          <small>โรบัสต้าจากภาคใต้ของไทย · AI ตรวจตำหนิ · real-time</small>
         </span>
       </a>
       <nav className="nav" aria-label="เมนูหลัก">

@@ -200,6 +200,8 @@ stateDiagram-v2
 
 **ราคาเริ่ม** ดูจากคลาสที่ความมั่นใจสูงสุดในล็อต เทียบตาราง `auction.start_price_by_class` ใน config.json (เช่น Parchment 90, Full_Black 30) ถ้าไม่มีในตารางใช้ `default_start_price`
 
+**แหล่งปลูก (origin)** ทุกล็อตติดข้อมูล `{province, farm, variety, region}` เพื่อบอกว่ามาจากภาคใต้ของไทย ลำดับความสำคัญ: payload MQTT ส่ง `origin` มาเอง → `config.json -> origin.by_device[<device_id>]` (ตั้งต่อกล้อง เช่น cam1 = ชุมพร, cam2 = ระนอง) → `origin.default` (ภาคใต้ / โรบัสต้า) หน้าเว็บแสดงเป็นชิปสีทะเลพร้อมหมุดบนการ์ดและหน้าล็อต
+
 ### 5.2 กติกาการเสนอราคา (db.js → placeBid)
 
 ทุกการเสนอราคาทำใน transaction เดียว (`BEGIN IMMEDIATE ... COMMIT`) จึงเป็น atomic: ถ้าสองคนกดพร้อมกันด้วยราคาเท่ากัน คนแรกที่ล็อกฐานข้อมูลได้จะชนะ คนที่สองจะถูกปฏิเสธด้วยข้อความ "ต้องเสนออย่างน้อย ..." ทดสอบยืนยันแล้วใน `e2e.test.mjs`
@@ -316,6 +318,13 @@ bids  : id, lot_id, bidder, amount, created_at
 
 ### 6.4 ธีมและ animation
 
+**อัตลักษณ์ภาคใต้** หน้าเว็บสื่อว่ากาแฟมาจากภาคใต้ของไทยด้วย 4 องค์ประกอบ
+
+- **สี** น้ำตาลเอสเปรสโซ + เหลืองอำพัน (ราคา) + **เขียวน้ำทะเลอันดามัน** (แหล่งปลูก, ป้ายหัวเรื่อง, footer)
+- **ลายปาเต๊ะ** พื้นหลังลายดอกสี่กลีบซ้อนวงจาง ๆ แบบผ้าปาเต๊ะ (SVG ฝังใน CSS ไม่มีไฟล์ภาพ) และเส้นลายสลับสีทะเล/อำพันใน footer
+- **ภาพประกอบ SVG** ส่วนหัวหน้าแรก: เขาหินปูน ทะเล เรือหัวโทง ต้นมะพร้าว และกิ่งกาแฟโรบัสต้าผลสุก มี animation คลื่นไหล เรือโคลง ใบมะพร้าวแกว่ง (`components/SouthernScene.tsx`) สีปรับตามธีมสว่าง/มืด
+- **ข้อความ** ชื่อ "ประมูลกาแฟใต้", ป้าย "กาแฟโรบัสต้าจากภาคใต้ของไทย", ชิปจังหวัด (ชุมพร ระนอง สุราษฎร์ธานี กระบี่ …) บนทุกล็อต และรายชื่อแหล่งปลูกใน footer
+
 - ธีมตามระบบเป็นค่าเริ่ม (`color-scheme: light dark`) ปุ่มบนขวาปักธีมตรงข้ามได้ จำใน localStorage และมี inline script ใน `index.html` กัน flash ตอนโหลด
 - การ์ดโผล่แบบไล่จังหวะ (stagger) ด้วย `sibling-index()` บน browser ใหม่ และ `--i` จาก React เป็น fallback
 - Toast ใช้ `@starting-style` สำหรับ animation ตอนเข้า, ทุก animation ถูกปิดเมื่อผู้ใช้ตั้ง `prefers-reduced-motion`
@@ -355,6 +364,7 @@ bids  : id, lot_id, bidder, amount, created_at
 |---|---|---|
 | ราก | `http_port`, `db_file` | พอร์ตเว็บ, ไฟล์ SQLite |
 | admin | `password_env`, `default_password`, `session_hours`, `max_failed_attempts`, `lock_seconds` | รหัส admin อ่านจาก env/`.env` ก่อน ค่า default เฉพาะสาธิต, อายุ session, กัน brute force |
+| origin | `default`, `by_device.<device_id>` = `{province, farm, variety, region}` | แหล่งปลูกที่ติดไปกับล็อตตามชื่อกล้อง (แสดงเป็นชิปจังหวัดภาคใต้บนหน้าเว็บ) |
 | mqtt | `detector_config`, `embedded_broker`, `external_url`, `topic` | แหล่งค่า MQTT (ดู 5.5) |
 | auction | `duration_seconds`, `min_increment`, `default_start_price`, `start_price_by_class` | เวลาประมูล, ขั้นต่ำเพิ่ม, ราคาเริ่มต่อคลาส |
 | auction.soft_close | `enabled`, `extend_window_seconds`, `extend_to_seconds`, `max_extensions` | ต่อเวลาอัตโนมัติ (ค่าเริ่มต้นตอนสตาร์ท) |
@@ -378,6 +388,7 @@ bids  : id, lot_id, bidder, amount, created_at
 ```
 
 `time` เป็น ISO 8601 พร้อม timezone, `confidence` 0-1, `track_id` ตรงกับเลข # บนจอ
+ใส่ `"origin": {"province": "ชุมพร", "farm": "...", "variety": "โรบัสต้า"}` เพิ่มได้ (ไม่บังคับ) ถ้าไม่ใส่ backend เติมจาก `config.json -> origin.by_device[device]`
 
 ### REST (backend, ทุกอย่างเป็น JSON)
 

@@ -21,6 +21,17 @@
   --green: var(--green-light); --red: var(--red-light); --amber: var(--amber-light);
   --shadow: 0 10px 30px -12px rgba(60, 35, 15, 0.25);
 
+  /* โทนภาคใต้: ทะเลอันดามัน + ปาเต๊ะ */
+  --sea-light-l: #6fd0d6;  --sea-light-d: #2b8f98;
+  --sea-l: #1f8a93;        --sea-d: #145c63;
+  --sea-light: var(--sea-light-l); --sea: var(--sea-l);
+  --sea-ink: var(--sea-l);   /* สีตัวอักษรโทนทะเล: เข้มบนพื้นสว่าง สว่างบนพื้นมืด */
+  --sky-top: #dff3f6; --sky-bottom: #f7ecd9;
+  --karst: #4c6b5a; --karst-far: #8fb0a0;
+  --sand: #f1dfb8; --trunk: #7a5230; --leaf: #3f8f5a; --leaf-dark: #2f6b44;
+  --wood: #7a4a2a; --sail: #f3d58a; --cherry: #c9412e; --cherry-ripe: #8e1f1a;
+  --batik-ink: rgba(31, 138, 147, 0.10);
+
   --radius: 16px;
   --radius-sm: 10px;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -41,6 +52,9 @@
     --accent: var(--accent-dark); --accent-ink: var(--accent-ink-dark);
     --green: var(--green-dark); --red: var(--red-dark); --amber: var(--amber-dark);
     --shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.6);
+    --sea-light: var(--sea-light-d); --sea: var(--sea-d); --sea-ink: var(--sea-light-d);
+    --sky-top: #16323a; --sky-bottom: #2b2320; --karst: #26382f; --karst-far: #3b524a;
+    --sand: #6b5a3e; --leaf: #2f7a48; --leaf-dark: #21563a; --sail: #d9b96a;
   }
 }
 /* ผู้ใช้ปักธีมเอง (ตั้งจาก inline script ใน index.html และปุ่มสลับ) */
@@ -51,6 +65,9 @@
   --accent: var(--accent-dark); --accent-ink: var(--accent-ink-dark);
   --green: var(--green-dark); --red: var(--red-dark); --amber: var(--amber-dark);
   --shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.6);
+  --sea-light: var(--sea-light-d); --sea: var(--sea-d); --sea-ink: var(--sea-light-d);
+  --sky-top: #16323a; --sky-bottom: #2b2320; --karst: #26382f; --karst-far: #3b524a;
+  --sand: #6b5a3e; --leaf: #2f7a48; --leaf-dark: #21563a; --sail: #d9b96a;
 }
 :root[data-theme="light"] { color-scheme: light; }
 
@@ -61,11 +78,13 @@ body {
   margin: 0;
   color: var(--fg);
   background: var(--bg);
-  /* พื้นหลังไล่สีนุ่ม ๆ + จุดแสง */
+  /* พื้นหลัง: แสงอุ่นมุมซ้าย + ทะเลมุมขวา + ลายปาเต๊ะจาง ๆ (ลายดอกสี่กลีบซ้อนวง แบบผ้าปาเต๊ะภาคใต้) */
   background-image:
     radial-gradient(900px 500px at 10% -10%, color-mix(in oklab, var(--accent) 18%, transparent), transparent 60%),
-    radial-gradient(700px 400px at 100% 0%, color-mix(in oklab, var(--green) 14%, transparent), transparent 60%);
-  background-attachment: fixed;
+    radial-gradient(700px 400px at 100% 0%, color-mix(in oklab, var(--sea) 18%, transparent), transparent 60%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='72' height='72' viewBox='0 0 72 72'><g fill='none' stroke='%231f8a93' stroke-opacity='0.13' stroke-width='1.2'><circle cx='36' cy='36' r='10'/><path d='M36 6c6 8 6 16 0 24-6-8-6-16 0-24zM36 42c6 8 6 16 0 24-6-8-6-16 0-24zM6 36c8-6 16-6 24 0-8 6-16 6-24 0zM42 36c8-6 16-6 24 0-8 6-16 6-24 0z'/><circle cx='0' cy='0' r='4'/><circle cx='72' cy='0' r='4'/><circle cx='0' cy='72' r='4'/><circle cx='72' cy='72' r='4'/></g></svg>");
+  background-size: auto, auto, 72px 72px;
+  background-attachment: fixed, fixed, scroll;
 }
 h1, h2, h3 { margin: 0; line-height: 1.25; letter-spacing: -0.01em; }
 button, input { font: inherit; color: inherit; }

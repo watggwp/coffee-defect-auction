@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Lot } from '../api'
 import { LotCard, fmtBaht } from '../components/LotCard'
+import { SouthernScene } from '../components/SouthernScene'
 import { useToast } from '../components/Toasts'
 import type { useAuction } from '../hooks/useAuction'
 
@@ -39,19 +40,22 @@ export function AuctionPage({ auction, bidder, setBidder }: {
 
   return (
     <>
-      <section className="hero">
+      <section className="hero southern">
         <div className="hero-text">
-          <h1>ล็อตจากผลตรวจ AI <span className="grad">เข้าประมูลทันที</span></h1>
-          <p>ทุกล็อตเปิด {settings.duration_seconds} วิ · เพิ่มขั้นต่ำ {settings.min_increment} บาท ·
+          <span className="eyebrow">☀ กาแฟโรบัสต้าจากภาคใต้ของไทย</span>
+          <h1>เมล็ดกาแฟใต้ ตรวจด้วย AI <span className="grad">เข้าประมูลทันที</span></h1>
+          <p>จากสวนกาแฟชุมพร ระนอง สุราษฎร์ธานี กระบี่ ถึงหน้าจอคุณแบบ real-time ·
+            ทุกล็อตเปิด {settings.duration_seconds} วิ · เพิ่มขั้นต่ำ {settings.min_increment} บาท ·
             ต่อเวลาอัตโนมัติ <b className={settings.soft_close.enabled ? 'on' : 'off'}>{settings.soft_close.enabled ? 'เปิด' : 'ปิด'}</b>
             {settings.soft_close.enabled && ` (เหลือ < ${settings.soft_close.extend_window_seconds} วิ แล้วมีคนเสนอ → กลับเป็น ${settings.soft_close.extend_to_seconds} วิ)`}
             <br />กดการ์ดเพื่อดูรายละเอียดและเสนอราคา</p>
+          <div className="stats">
+            <div className="stat"><b>{open.length}</b><small>กำลังประมูล</small></div>
+            <div className="stat"><b>{myLeading}</b><small>คุณนำอยู่</small></div>
+            <div className="stat"><b>{myWins.length}</b><small>คุณชนะ</small></div>
+          </div>
         </div>
-        <div className="stats">
-          <div className="stat"><b>{open.length}</b><small>กำลังประมูล</small></div>
-          <div className="stat"><b>{myLeading}</b><small>คุณนำอยู่</small></div>
-          <div className="stat"><b>{myWins.length}</b><small>คุณชนะ</small></div>
-        </div>
+        <SouthernScene className="hero-art" />
       </section>
 
       <section className="toolbar">

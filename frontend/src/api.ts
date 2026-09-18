@@ -16,7 +16,11 @@ export interface Lot {
   ends_at: string
   extensions: number
   status: 'open' | 'sold' | 'unsold'
+  origin?: Origin | null
 }
+
+/** แหล่งปลูก (ตั้งต่อกล้องใน backend/config.json -> origin) */
+export interface Origin { province?: string; farm?: string; variety?: string; region?: string }
 
 export interface SoftClose {
   enabled: boolean

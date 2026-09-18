@@ -32,11 +32,12 @@ export function openDb(file) {
   // migration: ฐานข้อมูลเก่าที่ยังไม่มีคอลัมน์ extensions (จำนวนครั้งที่ต่อเวลา)
   const cols = db.prepare(`PRAGMA table_info(lots)`).all().map((c) => c.name);
   if (!cols.includes("extensions")) db.exec(`ALTER TABLE lots ADD COLUMN extensions INTEGER NOT NULL DEFAULT 0`);
+  if (!cols.includes("origin")) db.exec(`ALTER TABLE lots ADD COLUMN origin TEXT`); // JSON {province, farm, variety, region}
 
   const q = {
     insertLot: db.prepare(`
-      INSERT INTO lots (created_at, device, detected_at, main_class, detections, start_price, current_price, ends_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`),
+      INSERT INTO lots (created_at, device, detected_at, main_class, detections, start_price, current_price, ends_at, origin)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
     getLot: db.prepare(`SELECT * FROM lots WHERE id = ?`),
     listLots: db.prepare(`SELECT * FROM lots WHERE status = ? ORDER BY id DESC LIMIT ?`),
     listAll: db.prepare(`SELECT * FROM lots ORDER BY id DESC LIMIT ?`),
@@ -49,13 +50,13 @@ export function openDb(file) {
     closeLot: db.prepare(`UPDATE lots SET status = ? WHERE id = ?`),
   };
 
-  const rowToLot = (r) => (r ? { ...r, detections: JSON.parse(r.detections) } : null);
+  const rowToLot = (r) => (r ? { ...r, detections: JSON.parse(r.detections), origin: r.origin ? JSON.parse(r.origin) : null } : null);
 
   return {
-    createLot({ device, detected_at, main_class, detections, start_price, ends_at }) {
+    createLot({ device, detected_at, main_class, detections, start_price, ends_at, origin = null }) {
       const now = new Date().toISOString();
       const info = q.insertLot.run(now, device, detected_at, main_class, JSON.stringify(detections),
-        start_price, start_price, ends_at);
+        start_price, start_price, ends_at, origin ? JSON.stringify(origin) : null);
       return rowToLot(q.getLot.get(Number(info.lastInsertRowid)));
     },
     getLot: (id) => rowToLot(q.getLot.get(id)),
