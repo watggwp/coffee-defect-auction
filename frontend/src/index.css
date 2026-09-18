@@ -1,17 +1,88 @@
+/* ================= Design tokens (โทนกาแฟ) ================= */
 :root {
-  --green: #277150;
-  --red: #c83232;
-  --bg: #f6f8f7;
-  --card: #ffffff;
-  --fg: #1c1f1e;
-  --muted: #6b7371;
-  --line: #dfe5e2;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Thai", sans-serif;
-  line-height: 1.45;
+  /* raw colors */
+  --bg-light: #f6f1ea;          --bg-dark: #15110e;
+  --bg2-light: #efe6da;         --bg2-dark: #1d1713;
+  --card-light: rgba(255, 252, 247, 0.82); --card-dark: rgba(38, 30, 25, 0.72);
+  --card-solid-light: #fffcf7;  --card-solid-dark: #261e19;
+  --fg-light: #2a1f18;          --fg-dark: #f3ebe0;
+  --muted-light: #7d6b5d;       --muted-dark: #b3a294;
+  --line-light: rgba(60, 40, 25, 0.12); --line-dark: rgba(255, 235, 210, 0.12);
+  --accent-light: #b8731a;      --accent-dark: #e8a94a;
+  --accent-ink-light: #ffffff;  --accent-ink-dark: #2a1f18;
+  --green-light: #2f7a4f;       --green-dark: #5fc38a;
+  --red-light: #c0392b;         --red-dark: #ff7b6b;
+  --amber-light: #d99a1e;       --amber-dark: #f5c04e;
+
+  /* fallback: light เป็นค่าเริ่ม */
+  --bg: var(--bg-light); --bg2: var(--bg2-light); --card: var(--card-light); --card-solid: var(--card-solid-light);
+  --fg: var(--fg-light); --muted: var(--muted-light); --line: var(--line-light);
+  --accent: var(--accent-light); --accent-ink: var(--accent-ink-light);
+  --green: var(--green-light); --red: var(--red-light); --amber: var(--amber-light);
+  --shadow: 0 10px 30px -12px rgba(60, 35, 15, 0.25);
+
+  --radius: 16px;
+  --radius-sm: 10px;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
   color-scheme: light dark;
+  font-family: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, "Noto Sans Thai", "Sarabun", sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  accent-color: var(--accent);
 }
+
+/* ระบบเป็น dark (fallback สำหรับ browser ที่ไม่มี light-dark) */
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #131715; --card: #1b201e; --fg: #e8ece9; --muted: #96a09b; --line: #2b332f; }
+  :root:not([data-theme="light"]) {
+    --bg: var(--bg-dark); --bg2: var(--bg2-dark); --card: var(--card-dark); --card-solid: var(--card-solid-dark);
+    --fg: var(--fg-dark); --muted: var(--muted-dark); --line: var(--line-dark);
+    --accent: var(--accent-dark); --accent-ink: var(--accent-ink-dark);
+    --green: var(--green-dark); --red: var(--red-dark); --amber: var(--amber-dark);
+    --shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.6);
+  }
 }
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--fg); }
+/* ผู้ใช้ปักธีมเอง (ตั้งจาก inline script ใน index.html และปุ่มสลับ) */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: var(--bg-dark); --bg2: var(--bg2-dark); --card: var(--card-dark); --card-solid: var(--card-solid-dark);
+  --fg: var(--fg-dark); --muted: var(--muted-dark); --line: var(--line-dark);
+  --accent: var(--accent-dark); --accent-ink: var(--accent-ink-dark);
+  --green: var(--green-dark); --red: var(--red-dark); --amber: var(--amber-dark);
+  --shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.6);
+}
+:root[data-theme="light"] { color-scheme: light; }
+
+/* ================= Base ================= */
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { min-height: 100%; }
+body {
+  margin: 0;
+  color: var(--fg);
+  background: var(--bg);
+  /* พื้นหลังไล่สีนุ่ม ๆ + จุดแสง */
+  background-image:
+    radial-gradient(900px 500px at 10% -10%, color-mix(in oklab, var(--accent) 18%, transparent), transparent 60%),
+    radial-gradient(700px 400px at 100% 0%, color-mix(in oklab, var(--green) 14%, transparent), transparent 60%);
+  background-attachment: fixed;
+}
+h1, h2, h3 { margin: 0; line-height: 1.25; letter-spacing: -0.01em; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+::selection { background: color-mix(in oklab, var(--accent) 35%, transparent); }
+
+/* ================= Keyframes ที่ใช้ร่วมกัน ================= */
+@keyframes fade-up { from { opacity: 0; translate: 0 14px; } to { opacity: 1; translate: 0 0; } }
+@keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 55%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
+@keyframes price-pop { 0% { scale: 1; } 40% { scale: 1.12; color: var(--amber); } 100% { scale: 1; } }
+@keyframes shake { 10%, 90% { translate: -1px 0; } 20%, 80% { translate: 2px 0; } 30%, 50%, 70% { translate: -4px 0; } 40%, 60% { translate: 4px 0; } }
+@keyframes float { 0%, 100% { translate: 0 0; } 50% { translate: 0 -10px; } }
+@keyframes shimmer { to { background-position: 200% 0; } }
+@keyframes spin { to { rotate: 360deg; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}

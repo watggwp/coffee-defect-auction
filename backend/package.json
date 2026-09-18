@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node --no-warnings=ExperimentalWarning e2e.test.mjs && node --no-warnings=ExperimentalWarning softclose.test.mjs",
+    "test": "node --no-warnings=ExperimentalWarning e2e.test.mjs && node --no-warnings=ExperimentalWarning admin.test.mjs && node --no-warnings=ExperimentalWarning softclose.test.mjs",
     "start": "node --no-warnings=ExperimentalWarning server.js",
     "simulate": "node --no-warnings=ExperimentalWarning simulate.js"
   },

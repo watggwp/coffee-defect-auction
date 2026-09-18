@@ -55,8 +55,8 @@ flowchart LR
 | ส่วน | โฟลเดอร์ | เทคโนโลยี | พอร์ต | หน้าที่หลัก |
 |---|---|---|---|---|
 | ตัวตรวจ | `run_detect.py`, `config.yaml` | Python 3.12, ultralytics YOLO11, OpenCV, paho-mqtt | - | ตรวจจับ, ติดตามวัตถุ, นับเวลา, ส่ง MQTT |
-| Backend | `backend/` | Node.js 22+, Express, ws, mqtt, node:sqlite | 8000 HTTP+WS (1883 ถ้าใช้ broker ในตัว) | สร้างล็อต, ตัดสินการเสนอราคา, กระจายข้อมูล real-time, เก็บประวัติ |
-| Frontend | `frontend/` | React 19, Vite, TypeScript | 5173 (โหมดพัฒนา) | หน้าประมูลสำหรับผู้ซื้อหลายคนพร้อมกัน |
+| Backend | `backend/` | Node.js 22+, Express, ws, mqtt, node:sqlite | 8000 HTTP+WS (1883 ถ้าใช้ broker ในตัว) | สร้างล็อต, ตัดสินการเสนอราคา, กระจายข้อมูล real-time, เก็บประวัติ, login admin |
+| Frontend | `frontend/` | React 19, Vite, TypeScript | 5173 (โหมดพัฒนา) | หน้าประมูล (ทุกคน) และหน้าตั้งค่า (admin login) ธีมสว่าง/มืด มี animation |
 | ตัวเปิดระบบ | `start_all.py`, `start.bat` | Python | - | เปิดทั้ง 3 ส่วนด้วยคำสั่งเดียว |
 
 **ทำไมต้องมี broker และ backend ตรงกลาง** เพราะการประมูลต้องมี "ความจริงชุดเดียว" ว่าใครเสนอราคาก่อนและราคาเท่าไร ถ้าปล่อยให้ browser ของผู้ซื้อคุยกันเอง จะเกิดกรณีสองคนกดพร้อมกันแล้วเห็นผลไม่ตรงกัน backend จึงเป็นผู้ตัดสินเพียงคนเดียว และ MQTT ทำให้ตัวตรวจกับ backend ไม่ต้องรู้จักกันโดยตรง (ตัวตรวจอยู่ที่โรงงาน backend อยู่ที่ server ก็ได้)
@@ -224,7 +224,7 @@ stateDiagram-v2
 ```
 
 - `max_extensions: 0` = ไม่จำกัดจำนวนครั้ง
-- เปิด/ปิดและแก้ตัวเลขได้จากแถบบนหน้าเว็บผ่าน `PUT /api/settings` มีผลกับทุกคนทันที แต่ไม่บันทึกลงไฟล์ รีสตาร์ทแล้วกลับเป็นค่าใน config.json
+- เปิด/ปิดและแก้ตัวเลขได้จากหน้า `#/admin` (ต้อง login) ผ่าน `PUT /api/settings` มีผลกับทุกคนทันที แต่ไม่บันทึกลงไฟล์ รีสตาร์ทแล้วกลับเป็นค่าใน config.json
 - เมื่อต่อเวลา backend ส่ง WS `lot_extended` และนับ `extensions` ในล็อต
 
 ### 5.4 นาฬิกาปิดล็อต
@@ -250,25 +250,64 @@ bids  : id, lot_id, bidder, amount, created_at
 
 ลบไฟล์ `auction.db` เพื่อเริ่มใหม่ ตารางจะถูกสร้างอัตโนมัติ (มี migration เพิ่มคอลัมน์ให้ฐานข้อมูลเก่า)
 
+### 5.7 ระบบ login admin (auth.js)
+
+การแก้กติกา (`PUT /api/settings`) ทำได้เฉพาะ admin ส่วนการดูล็อต เสนอราคา และอ่านกติกา ไม่ต้อง login
+
+```
+หน้าเว็บ #/admin ──POST /api/admin/login {password}──> backend ตรวจรหัส ──> token (สุ่ม 32 byte, อายุ 12 ชม.)
+หน้าเว็บเก็บ token ใน localStorage ──PUT /api/settings + Authorization: Bearer <token>──> ผ่าน requireAdmin
+```
+
+- **รหัสผ่าน** อ่านตามลำดับ: ตัวแปรแวดล้อม `ADMIN_PASSWORD` → ไฟล์ `backend/.env` (ไม่ขึ้น git มีแม่แบบ `.env.example`) → `config.json -> admin.default_password` (เฉพาะสาธิต backend จะเตือนใน log และหน้า admin จะขึ้นแถบเหลือง)
+- **กัน brute force** ผิดครบ `max_failed_attempts` (5) ล็อก IP นั้น `lock_seconds` (30 วิ) เทียบรหัสด้วย `timingSafeEqual`
+- **session** อยู่ในหน่วยความจำของ backend รีสตาร์ทแล้วต้อง login ใหม่ logout ลบ token ทันที
+- **ต่อยอด** `auth.js` ออกแบบเป็น session store กลาง อนาคตเพิ่ม role `bidder` (Google / อีเมล OTP) ได้โดยไม่ต้องรื้อ
+
 ---
 
 ## 6. ส่วนที่ 3: Frontend (React)
 
-ไฟล์หลัก `frontend/src/App.tsx` (หน้าเดียว) และ `api.ts` (ชนิดข้อมูล + fetch + WebSocket)
+โครงไฟล์ใน `frontend/src/`
 
-### 6.1 องค์ประกอบหน้าเว็บ
+| ไฟล์ | หน้าที่ |
+|---|---|
+| `App.tsx` | hash router (`#/` ประมูล, `#/admin` ตั้งค่า), Header, Toast provider |
+| `api.ts` | ชนิดข้อมูล, REST, WebSocket, admin login/logout/token |
+| `hooks/useAuction.ts` | state กลาง: ล็อต กติกา สถานะเชื่อมต่อ feed เหตุการณ์ และการเสนอราคา |
+| `pages/AuctionPage.tsx` | หน้าประมูลสำหรับทุกคน |
+| `pages/AdminPage.tsx` | หน้า login admin และแผงตั้งค่ากติกา |
+| `components/LotCard.tsx` | การ์ดล็อต, `CountdownRing.tsx` วงแหวนนับถอยหลัง, `Header.tsx` แถบบน + ปุ่มสลับธีม, `Toasts.tsx` แจ้งเตือน |
+| `index.css` | design tokens (สี, มุม, easing) ธีมสว่าง/มืด, keyframes |
+| `App.css` | สไตล์ทุกส่วน |
+
+### 6.1 หน้าประมูล (`#/`)
 
 | ส่วน | ทำอะไร |
 |---|---|
-| หัวเว็บ | ช่องชื่อผู้เสนอราคา (จำใน localStorage ของ browser นั้น), สถานะเชื่อมต่อ real-time |
-| แถบต่อเวลาอัตโนมัติ | สวิตช์เปิด/ปิด, หน้าต่างเวลา, เวลาที่ต่อ, จำนวนครั้งสูงสุด + checkbox ไม่จำกัด |
-| แท็บ | กำลังประมูล (เรียงล็อตใกล้ปิดไว้บนสุด) / ปิดแล้ว |
-| การ์ดล็อต | คลาสหลัก, ผลตรวจทุกตัวพร้อมแถบความมั่นใจ, นับถอยหลัง, แถบเวลา, ราคาปัจจุบัน, ผู้เสนอสูงสุด, ช่องใส่ราคา + ปุ่มขั้นต่ำ + ปุ่มเสนอ |
-| เหตุการณ์ล่าสุด | log ด้านขวา: ล็อตใหม่, เสนอราคา, ต่อเวลา, ปิดล็อต, กติกาเปลี่ยน |
+| แถบบน | โลโก้, เมนู ประมูล / Admin, สถานะเชื่อมต่อ (จุดเขียวกระพริบ = สด), ปุ่มสลับธีมสว่าง/มืด |
+| Hero | สรุปกติกาปัจจุบัน + ตัวเลข กำลังประมูล / ขายแล้ว / คุณชนะ |
+| แถบเครื่องมือ | ช่องชื่อผู้เสนอราคา (จำใน localStorage ของ browser นั้น), แท็บ กำลังประมูล (เรียงใกล้ปิดก่อน) / ปิดแล้ว |
+| การ์ดล็อต | คลาสหลัก, **วงแหวนนับถอยหลัง**, ชิปสถานะ/ต่อเวลา, ผลตรวจทุกตัวพร้อมแถบความมั่นใจ, ราคาปัจจุบัน (เด้งเมื่อเปลี่ยน), ผู้เสนอสูงสุด, ช่องราคา + ปุ่มขั้นต่ำ + ปุ่มเสนอ |
+| เหตุการณ์ล่าสุด | feed ด้านขวา แยกสีตามชนิด: ล็อตใหม่ / เสนอราคา / ต่อเวลา / ปิดล็อต |
+| Toast | แจ้งเตือนมุมขวาล่างเมื่อมีล็อตใหม่ ต่อเวลา ปิดล็อต หรือเสนอราคาสำเร็จ/ล้มเหลว |
 
-**สีแถบเวลาบนการ์ด** เขียว = ปกติ, เหลือง = อยู่ในหน้าต่างต่อเวลา (เสนอตอนนี้จะต่อ), แดง = ใกล้หมดและต่อไม่ได้แล้ว การ์ดขอบแดงเมื่อเหลือไม่ถึง 10 วิ กระพริบเหลืองพร้อมข้อความ "+ ต่อเวลา" เมื่อถูกต่อ ป้าย `+N/สูงสุด` นับครั้งที่ต่อ
+**สีวงแหวน** เขียว = ปกติ, เหลือง = อยู่ในหน้าต่างต่อเวลา (เสนอตอนนี้จะต่อ), แดง = ใกล้หมดและต่อไม่ได้แล้ว การ์ดขอบแดงเต้นเมื่อเหลือไม่ถึง 10 วิ กรอบเหลืองพร้อมข้อความ "⏱ ต่อเวลา" เมื่อถูกต่อ ชิป `ต่อเวลา +N/สูงสุด` นับครั้ง
 
-### 6.2 การอัปเดตข้อมูล
+### 6.2 หน้า admin (`#/admin`)
+
+1. ยังไม่ login → การ์ดใส่รหัสผ่าน (มีปุ่มแสดง/ซ่อน, สั่นเมื่อผิด, บอกจำนวนครั้งที่เหลือ, นับถอยหลังตอนถูกล็อก)
+2. login แล้ว → แผง **เวลาและราคา** (เวลาประมูลต่อล็อต, ขั้นต่ำเพิ่มราคา) และแผง **ต่อเวลาอัตโนมัติ** (สวิตช์, หน้าต่าง, เวลาที่ต่อ, สูงสุด + ไม่จำกัด, ตัวอย่างผล) แก้แล้วแถบ "บันทึก" เลื่อนขึ้นมาด้านล่าง กดบันทึกจึงมีผลกับทุกคน
+3. token เก็บใน localStorage ของ browser นั้น เข้าหน้านี้ครั้งต่อไปไม่ต้องใส่รหัสจน session หมดอายุ (12 ชม.) หรือกดออกจากระบบ
+
+### 6.3 ธีมและ animation
+
+- ธีมตามระบบเป็นค่าเริ่ม (`color-scheme: light dark`) ปุ่มบนขวาปักธีมตรงข้ามได้ จำใน localStorage และมี inline script ใน `index.html` กัน flash ตอนโหลด
+- การ์ดโผล่แบบไล่จังหวะ (stagger) ด้วย `sibling-index()` บน browser ใหม่ และ `--i` จาก React เป็น fallback
+- Toast ใช้ `@starting-style` สำหรับ animation ตอนเข้า, ทุก animation ถูกปิดเมื่อผู้ใช้ตั้ง `prefers-reduced-motion`
+- พื้นผิวกระจก (`backdrop-filter`) มี fallback เป็นพื้นทึบสำหรับ browser ที่ไม่รองรับ
+
+### 6.4 การอัปเดตข้อมูล
 
 1. โหลดครั้งแรกด้วย REST: `/api/lots` และ `/api/settings`
 2. เปิด WebSocket `/ws` รับ `snapshot` + `settings` ทันที จากนั้นรับ event ทีละรายการและอัปเดตเฉพาะการ์ดที่เกี่ยว (upsert ตาม id)
@@ -276,7 +315,7 @@ bids  : id, lot_id, bidder, amount, created_at
 4. เปลี่ยนกติกาใช้ optimistic update: แสดงบนจอทันที แล้วค่าจริงจาก server ตามมาทับ
 5. ทุกตัวเลขกติกา (ขั้นต่ำเพิ่มราคา, เวลาประมูล) ดึงจาก backend ไม่ hardcode ในหน้าเว็บ
 
-### 6.3 โหมดรัน
+### 6.5 โหมดรัน
 
 - **ใช้งานจริง** `npm run build` ได้ `frontend/dist/` แล้ว backend เสิร์ฟให้เองที่พอร์ต 8000 (พอร์ตเดียว เครื่องอื่นเข้าง่าย)
 - **พัฒนา** `npm run dev` ที่พอร์ต 5173 พร้อม hot reload โดย `vite.config.ts` proxy `/api` และ `/ws` ไป backend ให้
@@ -301,6 +340,7 @@ bids  : id, lot_id, bidder, amount, created_at
 | หมวด | คีย์สำคัญ | ความหมาย |
 |---|---|---|
 | ราก | `http_port`, `db_file` | พอร์ตเว็บ, ไฟล์ SQLite |
+| admin | `password_env`, `default_password`, `session_hours`, `max_failed_attempts`, `lock_seconds` | รหัส admin อ่านจาก env/`.env` ก่อน ค่า default เฉพาะสาธิต, อายุ session, กัน brute force |
 | mqtt | `detector_config`, `embedded_broker`, `external_url`, `topic` | แหล่งค่า MQTT (ดู 5.5) |
 | auction | `duration_seconds`, `min_increment`, `default_start_price`, `start_price_by_class` | เวลาประมูล, ขั้นต่ำเพิ่ม, ราคาเริ่มต่อคลาส |
 | auction.soft_close | `enabled`, `extend_window_seconds`, `extend_to_seconds`, `max_extensions` | ต่อเวลาอัตโนมัติ (ค่าเริ่มต้นตอนสตาร์ท) |
@@ -333,11 +373,15 @@ bids  : id, lot_id, bidder, amount, created_at
 | GET | `/api/lots?status=open&limit=100` | รายการล็อต status = open / sold / unsold / ว่าง = ทั้งหมด |
 | GET | `/api/lots/:id` | ล็อตเดียวพร้อมประวัติเสนอราคา `bids[]` |
 | POST | `/api/lots/:id/bids` | เสนอราคา body `{"bidder":"ชื่อ","amount":60}` ตอบล็อตใหม่ + `extended` |
-| GET | `/api/settings` | กติกาปัจจุบัน |
-| PUT | `/api/settings` | แก้กติกา body `{"soft_close": {...}}` (ส่งเฉพาะคีย์ที่จะแก้) |
+| GET | `/api/settings` | กติกาปัจจุบัน (ทุกคนอ่านได้) |
+| PUT | `/api/settings` | **admin** แก้กติกา body `{"duration_seconds", "min_increment", "soft_close": {...}}` ส่งเฉพาะคีย์ที่จะแก้ |
+| POST | `/api/admin/login` | body `{"password"}` → `{"token", "expires_at"}` ผิด = 401 (บอก `attempts_left`) ล็อก = 429 (บอก `retry_after`) |
+| POST | `/api/admin/logout` | ยกเลิก token |
+| GET | `/api/admin/me` | **admin** ตรวจว่า token ยังใช้ได้ คืน `role`, `expires_at`, `default_password` |
 | POST | `/api/lots` | สร้างล็อตด้วยมือเพื่อทดสอบ รับ `duration_seconds` ได้ |
 
-ข้อผิดพลาดตอบ `{"error": "ข้อความภาษาไทย", "min": ราคาขั้นต่ำ(ถ้ามี)}` ด้วย HTTP 400/404/409
+endpoint ที่ระบุ **admin** ต้องส่ง header `Authorization: Bearer <token>` ไม่มีหรือหมดอายุ = 401
+ข้อผิดพลาดตอบ `{"error": "ข้อความภาษาไทย", "min": ราคาขั้นต่ำ(ถ้ามี)}` ด้วย HTTP 400/401/404/409/429
 
 ### WebSocket `/ws` (backend → ทุก browser)
 
@@ -365,7 +409,8 @@ npm test                  # terminal 2: e2e.test.mjs + softclose.test.mjs
 | ชุดทดสอบ | ครอบคลุม |
 |---|---|
 | `e2e.test.mjs` | MQTT → สร้างล็อต, ปฏิเสธราคาต่ำ/ไม่มีชื่อ, ราคาสูงกว่าชนะ, 3 คนกดพร้อมกันมีผู้ชนะคนเดียว, WS ได้ event ครบ |
-| `softclose.test.mjs` | ต่อเวลาในหน้าต่าง, หยุดเมื่อครบ max, max=0 ไม่จำกัด, ปิดสวิตช์ไม่ต่อ, นอกหน้าต่างไม่ต่อ |
+| `admin.test.mjs` | PUT settings ไม่มี token = 401, รหัสผิด = 401, login ถูกได้ token, แก้ duration/min_increment ได้, logout แล้ว token ใช้ไม่ได้, token ปลอม = 401 |
+| `softclose.test.mjs` | login admin แล้วทดสอบ: ต่อเวลาในหน้าต่าง, หยุดเมื่อครบ max, max=0 ไม่จำกัด, ปิดสวิตช์ไม่ต่อ, นอกหน้าต่างไม่ต่อ |
 
 ทดสอบโดยไม่มีกล้อง: `npm run simulate 5` หรือ `python start_all.py --sim 5`
 ทดสอบหน้าเว็บคอมไพล์: `cd frontend; npx tsc -b; npm run build`
@@ -385,6 +430,9 @@ npm test                  # terminal 2: e2e.test.mjs + softclose.test.mjs
 | ตรวจเจอของบนหน้าจอเป็นตำหนิ | Source ใน OBS เป็น Display Capture | เปลี่ยน Source เป็นกล้องหรือวิดีโอ และเพิ่ม `conf` เป็น 0.5 |
 | ล็อตเข้ามาถี่เกินไป | `hold_seconds` สั้น หรือ ID กระโดด | เพิ่ม `hold_seconds` / `lost_seconds` หรือลอง `tracker: botsort.yaml` |
 | ข้อความไทยใน terminal เป็นตัวอ่านไม่ออก | console ไม่ใช่ UTF-8 | ใช้ `start.bat` (ตั้ง chcp 65001 ให้) หรือรัน `chcp 65001` ก่อน |
+| หน้า admin ขึ้นแถบเหลือง "ใช้รหัสผ่านค่าเริ่มต้น" | ยังไม่ได้ตั้ง `ADMIN_PASSWORD` | `copy backend\.env.example backend\.env` แก้รหัส แล้วรีสตาร์ท backend |
+| login admin แล้วขึ้น "ลองใหม่ใน N วิ" | ใส่รหัสผิดครบ 5 ครั้ง | รอตามเวลาที่บอก (ค่า `lock_seconds`) |
+| กดบันทึกกติกาแล้วเด้งกลับหน้า login | session หมดอายุ (12 ชม.) หรือ backend รีสตาร์ท (session อยู่ในหน่วยความจำ) | login ใหม่ |
 
 ---
 
@@ -394,7 +442,9 @@ npm test                  # terminal 2: e2e.test.mjs + softclose.test.mjs
 
 | ข้อจำกัด | ผลกระทบ | แนวทางเมื่อใช้จริง |
 |---|---|---|
-| ไม่มี login | ใครก็พิมพ์ชื่อใครได้ และทุกคนกดสวิตช์กติกาได้ | เพิ่ม auth (เช่น JWT) แยกสิทธิ์ผู้ซื้อ/ผู้ดูแล ย้ายแถบกติกาไปหน้า admin |
+| ผู้เสนอราคาไม่มี login (admin มีแล้ว) | ใครก็พิมพ์ชื่อใครได้ | เพิ่ม role `bidder` ใน `auth.js` ด้วย Google Sign-In หรืออีเมล OTP ผูกชื่อกับบัญชี |
+| session admin อยู่ในหน่วยความจำ | รีสตาร์ท backend แล้วต้อง login ใหม่ | เก็บ session ลง SQLite หรือใช้ JWT ที่มีลายเซ็น |
+| รหัสผ่าน admin เป็น plaintext ใน `.env` | คนที่เข้าถึงเครื่องอ่านได้ | เก็บเป็น hash (argon2/bcrypt) และหมุนรหัสเป็นระยะ |
 | ไม่มี HTTPS | ข้อมูลวิ่งเป็น plain text ในเครือข่าย | วาง reverse proxy (nginx/Caddy) พร้อมใบรับรอง |
 | ไม่มีชำระเงิน | ปิดล็อตแล้วจบแค่บันทึกผู้ชนะ | เชื่อมผู้ให้บริการชำระเงินภายนอก |
 | กติกาที่แก้จากหน้าเว็บไม่ persist | รีสตาร์ทแล้วกลับเป็นค่า config | บันทึกลง SQLite หรือเขียนกลับ config.json |

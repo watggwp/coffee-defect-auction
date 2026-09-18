@@ -11,9 +11,11 @@ import { WebSocketServer } from "ws";
 import mqtt from "mqtt";
 import { openDb } from "./db.js";
 import { resolveMqtt, connectOptions } from "./mqttConfig.js";
+import { createAuth } from "./auth.js";
 
 const cfg = JSON.parse(readFileSync(new URL("./config.json", import.meta.url), "utf-8"));
 const db = openDb(cfg.db_file);
+const auth = createAuth(cfg.admin);
 
 // กติกาที่เปลี่ยนได้ตอนรัน (จากหน้าเว็บผ่าน PUT /api/settings) ค่าเริ่มมาจาก config.json
 const sc0 = cfg.auction.soft_close ?? {};
@@ -102,17 +104,38 @@ app.post("/api/lots/:id/bids", (req, res) => {
   }
 });
 
-// กติกาประมูล: ดู / แก้ตอนรัน (soft close เปิด-ปิด, หน้าต่างเวลา, จำนวนครั้งสูงสุด 0 = ไม่จำกัด)
+// ---------------- Admin auth ----------------
+// POST /api/admin/login {password} -> {token, expires_at}   ใช้ header: Authorization: Bearer <token>
+app.post("/api/admin/login", (req, res) => {
+  const r = auth.login(req.body?.password, req.ip);
+  if (!r.ok) {
+    console.log(`[AUTH] login ล้มเหลวจาก ${req.ip}`);
+    return res.status(r.code).json({ error: r.error, attempts_left: r.attempts_left, retry_after: r.retry_after });
+  }
+  console.log(`[AUTH] admin login จาก ${req.ip}`);
+  res.json({ token: r.token, role: r.role, expires_at: r.expires_at });
+});
+app.post("/api/admin/logout", (req, res) => {
+  auth.logout(auth.tokenFrom(req));
+  res.json({ ok: true });
+});
+app.get("/api/admin/me", auth.requireAdmin, (req, res) =>
+  res.json({ role: req.session.role, expires_at: new Date(req.session.expiresAt).toISOString(), default_password: auth.usingDefault }));
+
+// กติกาประมูล: ทุกคนดูได้ แต่แก้ได้เฉพาะ admin
 app.get("/api/settings", (_req, res) => res.json(settings));
-app.put("/api/settings", (req, res) => {
-  const inp = req.body?.soft_close ?? {};
-  const sc = settings.soft_close;
+app.put("/api/settings", auth.requireAdmin, (req, res) => {
   const num = (v, cur, min) => (v === undefined ? cur : Math.max(min, Math.floor(Number(v)) || 0));
+  const b = req.body ?? {};
+  settings.duration_seconds = num(b.duration_seconds, settings.duration_seconds, 5);
+  settings.min_increment = num(b.min_increment, settings.min_increment, 1);
+  const inp = b.soft_close ?? {};
+  const sc = settings.soft_close;
   if (inp.enabled !== undefined) sc.enabled = Boolean(inp.enabled);
   sc.extend_window_seconds = num(inp.extend_window_seconds, sc.extend_window_seconds, 1);
   sc.extend_to_seconds = num(inp.extend_to_seconds, sc.extend_to_seconds, 1);
   sc.max_extensions = num(inp.max_extensions, sc.max_extensions, 0);
-  console.log(`[SETTINGS] soft_close ${JSON.stringify(sc)}`);
+  console.log(`[SETTINGS] ${JSON.stringify(settings)}`);
   broadcast("settings", settings);
   res.json(settings);
 });

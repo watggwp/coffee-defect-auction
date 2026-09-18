@@ -2,6 +2,15 @@
   "http_port": 8000,
   "db_file": "auction.db",
 
+  "admin": {
+    "_comment": "รหัสผ่านจริงตั้งใน backend/.env บรรทัด ADMIN_PASSWORD=... (ไฟล์นี้ไม่ขึ้น git) ค่า default_password ใช้เฉพาะสาธิต",
+    "password_env": "ADMIN_PASSWORD",
+    "default_password": "admin1234",
+    "session_hours": 12,
+    "max_failed_attempts": 5,
+    "lock_seconds": 30
+  },
+
   "mqtt": {
     "_comment": "detector_config = อ่าน host/port/username/password/topic จาก config.yaml ของตัวตรวจ (ตั้งค่าที่เดียว) | ใส่ null แล้วใช้ค่าด้านล่างแทน",
     "detector_config": "../config.yaml",
