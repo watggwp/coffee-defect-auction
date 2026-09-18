@@ -66,9 +66,13 @@ const jsonInit = (method: string, body: unknown, token?: string | null): Request
   body: JSON.stringify(body),
 })
 
+export interface Bid { id: number; lot_id: number; bidder: string; amount: number; created_at: string }
+
 // ---------- ประมูล ----------
 export const fetchLots = (status?: string) =>
   request<Lot[]>(`/api/lots${status ? `?status=${status}` : ''}`, {}, 'โหลดรายการไม่สำเร็จ')
+export const fetchLot = (id: number) =>
+  request<Lot & { bids: Bid[] }>(`/api/lots/${id}`, {}, 'ไม่พบล็อต')
 export const fetchSettings = () => request<Settings>('/api/settings', {}, 'โหลดกติกาไม่สำเร็จ')
 export const placeBid = (lotId: number, bidder: string, amount: number) =>
   request<Lot & { extended?: boolean }>(`/api/lots/${lotId}/bids`, jsonInit('POST', { bidder, amount }), 'เสนอราคาไม่สำเร็จ')

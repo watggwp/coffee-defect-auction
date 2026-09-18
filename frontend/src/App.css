@@ -129,6 +129,57 @@
 .err { grid-column: 1 / -1; color: var(--red); font-size: 0.8rem; animation: shake 0.5s; }
 .sold-banner { text-align: center; padding: 8px; border-radius: var(--radius-sm); background: color-mix(in oklab, #3c64c8 12%, transparent); font-size: 0.85rem; }
 
+/* ================= Compact card (หน้าแรก, เป็นลิงก์) ================= */
+.grid.wide { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+a.lot.compact { text-decoration: none; color: inherit; cursor: pointer; }
+a.lot.compact:hover .card-cta, a.lot.compact:focus-visible .card-cta { color: var(--accent); translate: 4px 0; }
+.card-cta { font-size: 0.82rem; font-weight: 600; color: var(--muted); transition: color 0.2s, translate 0.2s var(--ease-out); text-align: right; }
+.chip.mine-chip { background: color-mix(in oklab, var(--green) 18%, transparent); color: var(--green); }
+.chip.bad-chip { background: color-mix(in oklab, var(--red) 15%, transparent); color: var(--red); }
+
+/* ================= Lot page ================= */
+.lotpage { display: flex; flex-direction: column; gap: 16px; padding-top: 18px; }
+.back { align-self: flex-start; color: var(--muted); text-decoration: none; padding: 6px 10px; border-radius: 999px; transition: background 0.2s, color 0.2s; }
+.back:hover { background: color-mix(in oklab, var(--fg) 6%, transparent); color: var(--fg); }
+.lot-hero { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; padding: 6px 0; }
+.lot-hero h1 { font-size: clamp(1.6rem, 3vw, 2.4rem); margin: 2px 0 6px; }
+.lot-hero .chips { margin-top: 10px; }
+.lot-hero .ring-label { font-size: 1.7rem; }
+.lotpage.extended .lot-hero { animation: fade-up 0.4s var(--ease-spring); }
+.lot-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; align-items: start; }
+.lot-grid .history { grid-column: 1 / -1; }
+@media (max-width: 800px) { .lot-grid { grid-template-columns: 1fr; } }
+.bidpanel { gap: 14px; }
+.bidpanel .price { border-top: none; padding-top: 0; }
+.price-num.xl { font-size: 2.4rem; }
+.big-form { grid-template-columns: 1fr auto; }
+.big-form .quick { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
+.big-form .quick button.active { border-color: var(--accent); color: var(--accent); background: color-mix(in oklab, var(--accent) 10%, transparent); }
+.big-form input { font-size: 1.25rem; font-weight: 700; }
+.closed-banner { padding: 14px; border-radius: var(--radius-sm); text-align: center; font-size: 1rem; }
+.closed-banner.sold { background: color-mix(in oklab, #3c64c8 12%, transparent); }
+.closed-banner.unsold { background: color-mix(in oklab, var(--muted) 12%, transparent); color: var(--muted); }
+
+.timeline { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.timeline li { position: relative; display: grid; grid-template-columns: 70px 1fr; gap: 10px; padding: 8px 10px; border-radius: var(--radius-sm); font-size: 0.88rem; animation: fade-up 0.3s var(--ease-out) both; }
+.timeline li::before { content: ""; position: absolute; left: -20px; top: 14px; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); border: 2px solid var(--bg); }
+.timeline li time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.timeline li.bid::before { background: var(--accent); }
+.timeline li.bid.good { background: color-mix(in oklab, var(--green) 8%, transparent); }
+.timeline li.bid.good::before { background: var(--green); }
+.timeline li.top { font-weight: 600; }
+.timeline li.top::before { box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 30%, transparent); }
+.timeline li.extend { background: color-mix(in oklab, var(--amber) 8%, transparent); }
+.timeline li.extend::before { background: var(--amber); }
+.timeline li.close::before { background: #3c64c8; }
+.timeline li.lot { color: var(--muted); }
+
+/* View Transitions ระหว่างหน้า */
+@view-transition { navigation: auto; }
+::view-transition-old(root) { animation: 0.18s ease-out both fade-out-vt; }
+::view-transition-new(root) { animation: 0.28s var(--ease-out) both fade-up; }
+@keyframes fade-out-vt { to { opacity: 0; } }
+
 /* ================= Buttons ================= */
 button.primary, button.ghost {
   padding: 9px 16px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: transparent; color: var(--fg);
@@ -246,8 +297,16 @@ button.big { padding: 12px 20px; font-size: 1.05rem; width: 100%; }
 .savebar span { margin-right: auto; color: var(--muted); font-size: 0.85rem; }
 
 @media (max-width: 600px) {
-  .nav a { padding: 8px 10px; font-size: 0.9rem; }
+  .topbar { gap: 8px; padding: 8px 12px; }
+  .nav { margin-left: 0; }
+  .nav a { padding: 6px 9px; font-size: 0.85rem; white-space: nowrap; }
+  .brand strong { font-size: 0.9rem; white-space: nowrap; }
   .brand small { display: none; }
+  .brand-mark { width: 34px; height: 34px; font-size: 1rem; }
+  .conn { font-size: 0.72rem; padding: 3px 8px; }
+}
+@media (max-width: 400px) {
+  .brand strong { display: none; }
   .row2 { grid-template-columns: 1fr; }
   .bidform { grid-template-columns: 1fr 1fr; }
   .bidform input { grid-column: 1 / -1; }
