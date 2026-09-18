@@ -44,6 +44,7 @@ export type WsMessage =
   | { type: 'bid'; data: Lot; ts: string; extended?: boolean }
   | { type: 'lot_extended'; data: Lot; ts: string }
   | { type: 'lot_closed'; data: Lot; ts: string }
+  | { type: 'reset'; data: { lots: number; bids: number }; ts: string }
 
 export class ApiError extends Error {
   status: number
@@ -96,6 +97,9 @@ export const adminMe = () =>
   request<AdminSession>('/api/admin/me', { headers: { Authorization: `Bearer ${getAdminToken() ?? ''}` } }, 'session หมดอายุ')
 export const updateSettings = (patch: SettingsPatch) =>
   request<Settings>('/api/settings', jsonInit('PUT', patch, getAdminToken()), 'บันทึกกติกาไม่สำเร็จ')
+/** ลบล็อตและการเสนอราคาทั้งหมด เริ่มเลขล็อตที่ 1 ใหม่ (admin) */
+export const adminReset = () =>
+  request<{ ok: true; lots: number; bids: number }>('/api/admin/reset', jsonInit('POST', {}, getAdminToken()), 'ลบข้อมูลไม่สำเร็จ')
 
 // ---------- WebSocket ----------
 /** เปิด WebSocket ไป backend พร้อม reconnect อัตโนมัติ คืนฟังก์ชันสำหรับปิด */

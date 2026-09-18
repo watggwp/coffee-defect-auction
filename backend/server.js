@@ -119,6 +119,13 @@ app.post("/api/admin/logout", (req, res) => {
   auth.logout(auth.tokenFrom(req));
   res.json({ ok: true });
 });
+// ลบข้อมูลประมูลทั้งหมด (ล็อต + การเสนอราคา) แล้วเริ่มเลขล็อตที่ 1 ใหม่
+app.post("/api/admin/reset", auth.requireAdmin, (req, res) => {
+  const counts = db.resetAll();
+  console.log(`[ADMIN] reset ข้อมูลประมูล: ลบ ${counts.lots} ล็อต ${counts.bids} การเสนอราคา (จาก ${req.ip})`);
+  broadcast("reset", counts);
+  res.json({ ok: true, ...counts });
+});
 app.get("/api/admin/me", auth.requireAdmin, (req, res) =>
   res.json({ role: req.session.role, expires_at: new Date(req.session.expiresAt).toISOString(), default_password: auth.usingDefault }));
 

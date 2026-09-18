@@ -7,10 +7,22 @@ export const DEFAULT_SETTINGS: Settings = {
   soft_close: { enabled: true, extend_window_seconds: 10, extend_to_seconds: 10, max_extensions: 10 },
 }
 
-export interface AuctionEvent { id: number; time: string; text: string; kind: 'lot' | 'bid' | 'extend' | 'close' | 'settings' | 'error' }
+export interface AuctionEvent {
+  id: number
+  time: string
+  text: string
+  kind: 'lot' | 'bid' | 'extend' | 'close' | 'settings' | 'reset' | 'error'
+  lotId?: number
+  lotClass?: string
+  price?: number
+  bidder?: string | null      // ผู้เสนอสูงสุดหลังเหตุการณ์
+  prevBidder?: string | null  // ผู้เสนอสูงสุดก่อนเหตุการณ์ (ใช้หาว่าใครถูกแซง)
+  status?: Lot['status']
+}
 
 const fmtTime = (iso: string) =>
   new Date(iso).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+const nice = (s: string) => s.replaceAll('_', ' ')
 
 /** สถานะประมูลทั้งหมด + WebSocket real-time ใช้ร่วมกันได้ทุกหน้า */
 export function useAuction(onEvent?: (e: AuctionEvent) => void) {
@@ -26,10 +38,12 @@ export function useAuction(onEvent?: (e: AuctionEvent) => void) {
   onEventRef.current = onEvent
   const settingsRef = useRef<Settings>(DEFAULT_SETTINGS)
   useEffect(() => { settingsRef.current = settings }, [settings])
+  const lotsRef = useRef<Lot[]>([])
+  useEffect(() => { lotsRef.current = lots }, [lots])
 
-  const log = useCallback((text: string, kind: AuctionEvent['kind']) => {
-    const e: AuctionEvent = { id: ++seq.current, time: new Date().toLocaleTimeString('th-TH'), text, kind }
-    setEvents((l) => [e, ...l].slice(0, 50))
+  const log = useCallback((text: string, kind: AuctionEvent['kind'], extra: Partial<AuctionEvent> = {}) => {
+    const e: AuctionEvent = { id: ++seq.current, time: new Date().toLocaleTimeString('th-TH'), text, kind, ...extra }
+    setEvents((l) => [e, ...l].slice(0, 80))
     onEventRef.current?.(e)
   }, [])
 
@@ -51,6 +65,10 @@ export function useAuction(onEvent?: (e: AuctionEvent) => void) {
     window.clearTimeout(timers.current.ext)
     timers.current.ext = window.setTimeout(() => setExtendedId(null), 1600)
   }, [])
+
+  const lotExtra = (lot: Lot): Partial<AuctionEvent> => ({
+    lotId: lot.id, lotClass: nice(lot.main_class), price: lot.current_price, bidder: lot.current_bidder, status: lot.status,
+  })
 
   useEffect(() => {
     fetchLots().then((l) => setLots(l)).catch(() => log('โหลดรายการไม่สำเร็จ', 'error'))
@@ -74,17 +92,30 @@ export function useAuction(onEvent?: (e: AuctionEvent) => void) {
           break
         }
         case 'lot_created':
-          upsert(m.data); log(`ล็อต #${m.data.id} ${m.data.main_class.replaceAll('_', ' ')} เข้าประมูล เริ่ม ${m.data.start_price} บาท`, 'lot'); break
-        case 'bid':
-          upsert(m.data); log(`ล็อต #${m.data.id} ${m.data.current_bidder} เสนอ ${m.data.current_price} บาท`, 'bid'); break
+          upsert(m.data)
+          log(`ล็อต #${m.data.id} ${nice(m.data.main_class)} เข้าประมูล เริ่ม ${m.data.start_price} บาท`, 'lot', lotExtra(m.data))
+          break
+        case 'bid': {
+          const prev = lotsRef.current.find((l) => l.id === m.data.id)
+          upsert(m.data)
+          log(`ล็อต #${m.data.id} ${m.data.current_bidder} เสนอ ${m.data.current_price} บาท`, 'bid',
+            { ...lotExtra(m.data), prevBidder: prev?.current_bidder ?? null })
+          break
+        }
         case 'lot_extended':
           upsert(m.data, false); markExtended(m.data.id)
-          log(`ล็อต #${m.data.id} ต่อเวลาครั้งที่ ${m.data.extensions} ปิด ${fmtTime(m.data.ends_at)}`, 'extend'); break
+          log(`ล็อต #${m.data.id} ต่อเวลาครั้งที่ ${m.data.extensions} ปิด ${fmtTime(m.data.ends_at)}`, 'extend', lotExtra(m.data))
+          break
         case 'lot_closed':
           upsert(m.data)
           log(m.data.status === 'sold'
             ? `ล็อต #${m.data.id} ขายให้ ${m.data.current_bidder} ที่ ${m.data.current_price} บาท`
-            : `ล็อต #${m.data.id} ปิดโดยไม่มีผู้เสนอ`, 'close')
+            : `ล็อต #${m.data.id} ปิดโดยไม่มีผู้เสนอ`, 'close', lotExtra(m.data))
+          break
+        case 'reset':
+          setLots([])
+          setEvents([])
+          log(`ผู้ดูแลลบข้อมูลประมูลทั้งหมด (${m.data.lots} ล็อต) เริ่มนับล็อตที่ 1 ใหม่`, 'reset')
           break
       }
     }

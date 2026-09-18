@@ -7,6 +7,7 @@ let TOKEN = "";
 const put = (p, b) => fetch(B + p, { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` }, body: JSON.stringify(b) }).then(j);
 async function loginAdmin() {
   const cfg = JSON.parse((await import("node:fs")).readFileSync(new URL("./config.json", import.meta.url), "utf-8"));
+  try { process.loadEnvFile(new URL("./.env", import.meta.url)); } catch { /* ไม่มี .env */ }
   const password = process.env[cfg.admin?.password_env || "ADMIN_PASSWORD"] || cfg.admin?.default_password || "admin1234";
   const r = await fetch(B + "/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password }) });
   if (!r.ok) throw new Error("admin login failed: " + (await r.text()));

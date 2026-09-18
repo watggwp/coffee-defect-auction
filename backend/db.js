@@ -104,5 +104,19 @@ export function openDb(file) {
       q.closeLot.run(status, id);
       return rowToLot(q.getLot.get(id));
     },
+    // ลบล็อตและการเสนอราคาทั้งหมด แล้วให้เลขล็อตเริ่มที่ 1 ใหม่ (admin เท่านั้น)
+    resetAll() {
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const lots = db.prepare(`SELECT COUNT(*) AS n FROM lots`).get().n;
+        const bids = db.prepare(`SELECT COUNT(*) AS n FROM bids`).get().n;
+        db.exec(`DELETE FROM bids; DELETE FROM lots; DELETE FROM sqlite_sequence WHERE name IN ('lots','bids');`);
+        db.exec("COMMIT");
+        return { lots, bids };
+      } catch (e) {
+        db.exec("ROLLBACK");
+        throw e;
+      }
+    },
   };
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ApiError, adminLogin, adminLogout, adminMe, getAdminToken, updateSettings, type Settings, type SettingsPatch } from '../api'
+import { ApiError, adminLogin, adminLogout, adminMe, adminReset, getAdminToken, updateSettings, type Settings, type SettingsPatch } from '../api'
 import { useToast } from '../components/Toasts'
 import type { useAuction } from '../hooks/useAuction'
 
@@ -165,6 +165,8 @@ function SettingsPanel({ settings, onSaved, onLogout, defaultPassword, expiresAt
         </section>
       </div>
 
+      <DangerZone onLogout={onLogout} />
+
       <div className={`savebar ${dirty ? 'show' : ''}`}>
         <span>มีการเปลี่ยนแปลงที่ยังไม่บันทึก</span>
         <button className="ghost" onClick={() => setDraft(settings)} disabled={saving}>ยกเลิก</button>
@@ -173,6 +175,55 @@ function SettingsPanel({ settings, onSaved, onLogout, defaultPassword, expiresAt
         </button>
       </div>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------- Danger zone: ลบข้อมูลประมูลทั้งหมด
+function DangerZone({ onLogout }: { onLogout: () => void }) {
+  const toast = useToast()
+  const [arm, setArm] = useState(false)        // กดครั้งแรก = เตรียม, ครั้งที่สอง = ลบจริง
+  const [confirmText, setConfirmText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [last, setLast] = useState<{ lots: number; bids: number; at: string } | null>(null)
+  useEffect(() => { if (!arm) return; const t = setTimeout(() => { setArm(false); setConfirmText('') }, 15000); return () => clearTimeout(t) }, [arm])
+
+  const run = async () => {
+    setBusy(true)
+    try {
+      const r = await adminReset()
+      setLast({ lots: r.lots, bids: r.bids, at: new Date().toLocaleTimeString('th-TH') })
+      toast(`ลบแล้ว ${r.lots} ล็อต ${r.bids} การเสนอราคา ล็อตถัดไปเริ่มที่ #1`, 'success')
+      setArm(false); setConfirmText('')
+    } catch (ex) {
+      const ae = ex as ApiError
+      toast(ae.message, 'error')
+      if (ae.status === 401) onLogout()
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <section className="panel danger" style={{ '--i': 2 } as React.CSSProperties}>
+      <div className="panel-title">
+        <h2>ลบข้อมูลประมูลทั้งหมด</h2>
+        <span className="chip danger-chip">ย้อนกลับไม่ได้</span>
+      </div>
+      <p className="muted">ลบล็อตและประวัติการเสนอราคาทุกรายการออกจากฐานข้อมูล แล้วให้ล็อตใหม่เริ่มนับที่ #1 ใช้ก่อนเริ่มรอบสาธิตใหม่ กติกาและรหัสผ่านไม่ถูกลบ หน้าเว็บของทุกคนจะว่างทันที</p>
+      {!arm ? (
+        <button className="ghost danger-btn" onClick={() => setArm(true)}>ลบข้อมูลและเริ่มที่ล็อต #1 ใหม่…</button>
+      ) : (
+        <div className="confirm-row">
+          <label className="field">
+            <span>พิมพ์ <b>ลบ</b> เพื่อยืนยัน (ยกเลิกอัตโนมัติใน 15 วิ)</span>
+            <input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} autoFocus placeholder="ลบ" />
+          </label>
+          <button className="ghost" onClick={() => { setArm(false); setConfirmText('') }} disabled={busy}>ยกเลิก</button>
+          <button className="primary danger-fill" onClick={run} disabled={busy || confirmText.trim() !== 'ลบ'}>
+            {busy ? <span className="spinner" aria-hidden /> : null}ยืนยันลบทั้งหมด
+          </button>
+        </div>
+      )}
+      {last && <small className="muted">ล่าสุด {last.at}: ลบ {last.lots} ล็อต {last.bids} การเสนอราคา</small>}
+    </section>
   )
 }
 
