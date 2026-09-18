@@ -26,6 +26,11 @@ config.yaml
 .env
 .env.*
 
+# ---------- กฎส่วนตัวของ Claude Code (เก็บเฉพาะเครื่องนี้) ----------
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+
 # ---------- โมเดลและวิดีโอขนาดใหญ่ (best.pt 19 MB commit ได้ ถ้าใหญ่กว่านี้ให้ใช้ Git LFS หรือ Release) ----------
 *.mp4
 *.avi
